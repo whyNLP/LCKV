@@ -51,6 +51,10 @@ from transformers.utils.model_parallel_utils import assert_device_map, get_devic
 from transformers.models.gpt2.configuration_gpt2 import GPT2Config
 
 
+class ALGPT2Config(GPT2Config):
+    model_type = "algpt2"
+
+
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "gpt2"
@@ -445,7 +449,7 @@ class ALGPT2PreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = GPT2Config
+    config_class = ALGPT2Config
     load_tf_weights = load_tf_weights_in_gpt2
     base_model_prefix = "transformer"
     is_parallelizable = True
@@ -869,7 +873,10 @@ class ALGPT2Model(ALGPT2PreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         all_hidden_states = () if output_hidden_states else None
-        for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
+        # for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
+        for i in range(self.config.n_layer):
+            layer_past = past_key_values[i]
+
             # Model parallel
             if self.model_parallel:
                 torch.cuda.set_device(hidden_states.device)
@@ -894,7 +901,7 @@ class ALGPT2Model(ALGPT2PreTrainedModel):
                     return custom_forward
 
                 outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
+                    create_custom_forward(self.h),
                     hidden_states,
                     None,
                     attention_mask,
@@ -903,7 +910,7 @@ class ALGPT2Model(ALGPT2PreTrainedModel):
                     encoder_attention_mask,
                 )
             else:
-                outputs = block(
+                outputs = self.h(
                     hidden_states,
                     layer_past=layer_past,
                     attention_mask=attention_mask,
@@ -959,13 +966,13 @@ class ALGPT2Model(ALGPT2PreTrainedModel):
     """,
     GPT2_START_DOCSTRING,
 )
-class GPT2LMHeadModel(GPT2PreTrainedModel):
+class ALGPT2LMHeadModel(ALGPT2PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
     _keys_to_ignore_on_load_unexpected = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.transformer = GPT2Model(config)
+        self.transformer = ALGPT2Model(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
         # Model parallel
@@ -1152,14 +1159,14 @@ input sequence).
 """,
     GPT2_START_DOCSTRING,
 )
-class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
+class ALGPT2DoubleHeadsModel(ALGPT2PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"h\.\d+\.attn\.bias", r"h\.\d+\.attn\.masked_bias"]
     _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
         config.num_labels = 1
-        self.transformer = GPT2Model(config)
+        self.transformer = ALGPT2Model(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.multiple_choice_head = SequenceSummary(config)
 
@@ -1381,14 +1388,14 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     """,
     GPT2_START_DOCSTRING,
 )
-class GPT2ForSequenceClassification(GPT2PreTrainedModel):
+class ALGPT2ForSequenceClassification(ALGPT2PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"h\.\d+\.attn\.bias", r"h\.\d+\.attn\.masked_bias"]
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.transformer = GPT2Model(config)
+        self.transformer = ALGPT2Model(config)
         self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
 
         # Model parallel
@@ -1507,12 +1514,12 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
     """,
     GPT2_START_DOCSTRING,
 )
-class GPT2ForTokenClassification(GPT2PreTrainedModel):
+class ALGPT2ForTokenClassification(ALGPT2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.transformer = GPT2Model(config)
+        self.transformer = ALGPT2Model(config)
         if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None:
             classifier_dropout = config.classifier_dropout
         elif hasattr(config, "hidden_dropout") and config.hidden_dropout is not None:
@@ -1605,14 +1612,14 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
     """,
     GPT2_START_DOCSTRING,
 )
-class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
+class ALGPT2ForQuestionAnswering(ALGPT2PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"h\.\d+\.attn\.bias", r"h\.\d+\.attn\.masked_bias"]
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias", r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.transformer = GPT2Model(config)
+        self.transformer = ALGPT2Model(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
         # Model parallel
