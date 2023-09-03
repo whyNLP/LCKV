@@ -584,6 +584,11 @@ def main():
             labels = labels[:, 1:].reshape(-1)
             preds = preds[:, :-1].reshape(-1)
             return metric.compute(predictions=preds, references=labels)
+    
+    if training_args.do_predict:
+        if "test" not in tokenized_datasets:
+            raise ValueError("--do_predict requires a test dataset")
+        test_dataset = lm_datasets["test"]
 
     # Initialize our Trainer
     trainer = Trainer(
@@ -633,10 +638,26 @@ def main():
             perplexity = math.exp(metrics["eval_loss"])
         except OverflowError:
             perplexity = float("inf")
-        metrics["perplexity"] = perplexity
+        metrics["eval_perplexity"] = perplexity
 
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
+    
+    # Predict
+    if training_args.do_predict:
+        logger.info("*** Predict ***")
+
+        metrics = trainer.predict(test_dataset).metrics
+
+        metrics["test_samples"] = len(test_dataset)
+        try:
+            perplexity = math.exp(metrics["test_loss"])
+        except OverflowError:
+            perplexity = float("inf")
+        metrics["test_perplexity"] = perplexity
+
+        trainer.log_metrics("test", metrics)
+        trainer.save_metrics("test", metrics)
 
     kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "text-generation"}
     if data_args.dataset_name is not None:
