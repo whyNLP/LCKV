@@ -160,9 +160,15 @@ class ModelArguments:
     )
 
     def __post_init__(self):
-        if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
+        # if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
+        #     raise ValueError(
+        #         "--config_overrides can't be used in combination with --config_name or --model_name_or_path"
+        #     )
+        
+        # we allow config override for config files
+        if self.config_overrides is not None and self.model_name_or_path is not None:
             raise ValueError(
-                "--config_overrides can't be used in combination with --config_name or --model_name_or_path"
+                "--config_overrides can't be used in combination with --model_name_or_path"
             )
 
 
@@ -403,6 +409,10 @@ def main():
     }
     if model_args.config_name:
         config = AutoConfig.from_pretrained(model_args.config_name, **config_kwargs)
+        if model_args.config_overrides is not None:
+            logger.info(f"Overriding config: {model_args.config_overrides}")
+            config.update_from_string(model_args.config_overrides)
+            logger.info(f"New config: {config}")
     elif model_args.model_name_or_path:
         config = AutoConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
     else:
