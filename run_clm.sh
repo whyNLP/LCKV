@@ -1,5 +1,5 @@
 
-export WANDB_PROJECT=ALGPT2
+export WANDB_PROJECT=ALGPT2-Tuning
 echo "Start running..."
 
 # # gpt2
@@ -54,8 +54,17 @@ echo "Start running..."
 ## algpt2-large  (bz2)  30G
 
 
-# export ALGPT_TORCH_ATTN=1
+## When using flash attention, the memory usage is reduced.
 export ALGPT_FLASH_ATTN=1
+## gpt2-small    (bz64)  66G
+## algpt2-tiny   (bz128) 73G
+## algpt2-small  (bz16)  17G
+## algpt2-small  (bz64)  64G
+## algpt2-medium (bz32)  65G
+## algpt2-large  (bz16)  56G
+## algpt2-xl     (bz8)   46G
+## algpt2-xl     (bz12)  67G
+
 
 # # gpt2 deepspeed
 # deepspeed --master_port 60008 run_clm.py \
@@ -65,44 +74,48 @@ export ALGPT_FLASH_ATTN=1
 #     --tokenizer_name gpt2 \
 #     --dataset_name wikitext \
 #     --dataset_config_name wikitext-103-raw-v1 \
-#     --per_device_train_batch_size 16 \
-#     --per_device_eval_batch_size 16 \
+#     --per_device_train_batch_size 64 \
+#     --per_device_eval_batch_size 64 \
+#     --lr_scheduler_type cosine \
+#     --warmup_ratio 0.02 \
 #     --learning_rate 5e-4 \
+#     --bf16 \
 #     --do_train \
 #     --do_eval \
-#     --max_steps 100000 \
+#     --num_train_epochs 30 \
 #     --save_total_limit 3 \
-#     --save_strategy steps \
-#     --save_steps 2000 \
-#     --evaluation_strategy steps \
-#     --eval_steps 2000 \
+#     --save_strategy epoch \
+#     --evaluation_strategy epoch \
 #     --load_best_model_at_end True \
 #     --metric_for_best_model eval_loss \
-#     --report_to none \
+#     --report_to wandb \
+#     --run_name gpt2-bz64-lr5e-4 \
 #     --output_dir /tmp/test-clm-$RANDOM-`date +"%m-%d--%H-%M-%S"`
 
 # algpt2 deepspeed
-deepspeed --master_port 60001 run_clm.py \
+deepspeed --master_port 60003 run_clm.py \
     --deepspeed ds_config.json \
     --model_type algpt2 \
-    --config_name configs/config_medium.json \
+    --config_name configs/config_tiny.json \
     --tokenizer_name gpt2 \
     --dataset_name wikitext \
     --dataset_config_name wikitext-103-raw-v1 \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 8 \
-    --learning_rate 5e-4 \
+    --per_device_train_batch_size 128 \
+    --per_device_eval_batch_size 128 \
+    --lr_scheduler_type cosine \
+    --warmup_ratio 0.02 \
+    --learning_rate 2e-3 \
     --bf16 \
     --do_train \
     --do_eval \
-    --max_steps 100000 \
+    --do_predict \
+    --num_train_epochs 100 \
     --save_total_limit 3 \
-    --save_strategy steps \
-    --save_steps 2000 \
-    --evaluation_strategy steps \
-    --eval_steps 2000 \
+    --save_strategy epoch \
+    --evaluation_strategy epoch \
     --load_best_model_at_end True \
     --metric_for_best_model eval_loss \
-    --report_to none \
+    --report_to wandb \
+    --run_name algpt2-tiny-long \
     --output_dir /tmp/test-clm-$RANDOM-`date +"%m-%d--%H-%M-%S"`
 
