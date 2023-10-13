@@ -1,1 +1,8 @@
 transformers == 4.32.0
+accelerate >= 0.20.1
+datasets
+evaluate
+scikit-learn
+deepspeed
+
+flash-attn == 2.1.1
