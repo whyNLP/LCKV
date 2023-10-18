@@ -425,7 +425,7 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
                     logits: torch.Tensor = self.lm_heads[idx](hidden_states)
 
                     # collect the logits that are ready to exit
-                    exit_entries = logits.softmax(-1).max(-1) >= self.config.exit_threshold
+                    exit_entries = logits.softmax(-1).max(-1)[0] >= self.config.exit_threshold
                     exit_entries &= ~exited_indicator
                     exited_indicator |= exit_entries
                     exited_logits[exit_entries] = logits[exit_entries]
