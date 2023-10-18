@@ -26,6 +26,7 @@ class GPT2ConfigBase(_GPT2Config):
         self,
         use_sweet: bool = False,
         use_ln_head: bool = True,
+        share_head: bool = False,
         loss_layers: str = "-1",
         loss_weights: str = "1.0",
         exit_layers: str = "-1",
@@ -42,6 +43,9 @@ class GPT2ConfigBase(_GPT2Config):
             use_ln_head (`bool`, *optional*, defaults to True):
                 Add a layer norm before each prediction head. This is consistent with GPT2
                 structure, which has a layer norm at the end of transformer blocks.
+            share_head (`bool`, *optional*, defaults to False):
+                Share the same prediction head for all exit transformer blocks. Suitable
+                for ALGPT2 which shares parameters for all transformer blocks.
             loss_layers (`str`, *optional*, defaults to "-1"):
                 The layers to calculate loss. The layers are separated by underscore. The
                 default value is "-1", which means the last layer. The value "-2_-1" means
@@ -61,6 +65,7 @@ class GPT2ConfigBase(_GPT2Config):
         super().__init__(**kwargs)
         self.use_sweet = use_sweet
         self.use_ln_head = use_ln_head
+        self.share_head = share_head
         self.loss_layers = loss_layers
         self.loss_weights = loss_weights
         self.exit_layers = exit_layers

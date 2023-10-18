@@ -328,19 +328,36 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
         self.exit_layers = [int(x) if int(x) >= 0 else int(x) + config.num_hidden_layers for x in config.exit_layers.split("_")]
 
         # Early exit classifiers
-        if config.use_ln_head:
-            self.lm_heads = nn.ModuleList([
-                nn.Sequential(
-                    nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon),
-                    nn.Linear(config.n_embd, config.vocab_size, bias=False) 
-                )
-                for _ in range(len(self.loss_weights) - 1)
-            ])
+        if config.share_head:
+            # reuse params, do not register
+            if config.use_ln_head:
+                self.lm_heads = [
+                    nn.Sequential(
+                        self.transformer.ln_f,
+                        self.lm_head
+                    )
+                    for _ in range(len(self.loss_weights) - 1)
+                ]
+            else:
+                self.lm_heads = [
+                    self.lm_head
+                    for _ in range(len(self.loss_weights) - 1)
+                ]
         else:
-            self.lm_heads = nn.ModuleList([
-                nn.Linear(config.n_embd, config.vocab_size, bias=False) 
-                for _ in range(len(self.loss_weights) - 1)
-            ])
+            # create new blocks
+            if config.use_ln_head:
+                self.lm_heads = nn.ModuleList([
+                    nn.Sequential(
+                        nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon),
+                        nn.Linear(config.n_embd, config.vocab_size, bias=False) 
+                    )
+                    for _ in range(len(self.loss_weights) - 1)
+                ])
+            else:
+                self.lm_heads = nn.ModuleList([
+                    nn.Linear(config.n_embd, config.vocab_size, bias=False) 
+                    for _ in range(len(self.loss_weights) - 1)
+                ])
         
         # Loss func
         self.loss_func = CrossEntropyLoss()
