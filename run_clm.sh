@@ -1,6 +1,17 @@
 
 export WANDB_PROJECT=ALGPT2-Tuning
 echo "Start running..."
+echo "Slurm job id: $SLURM_JOB_ID"
+
+function rand(){
+    min=$1
+    max=$(($2-$min+1))
+    num=$(($RANDOM+1000000000))
+    echo $(($num%$max+$min))
+}
+
+MASTER_PORT=$(rand 50000 60000)
+
 
 # # gpt2
 # python run_clm.py \
@@ -93,46 +104,20 @@ export ALGPT_FLASH_ATTN=1
 #     --run_name gpt2-tiny \
 #     --output_dir /tmp/test-clm-$RANDOM-`date +"%m-%d--%H-%M-%S"`
 
-# # algpt2 deepspeed
-# deepspeed --master_port 60003 run_clm.py \
-#     --deepspeed ds_config.json \
-#     --model_type algpt2 \
-#     --config_name configs/algpt/config_tiny.json \
-#     --tokenizer_name gpt2 \
-#     --dataset_name wikitext \
-#     --dataset_config_name wikitext-103-raw-v1 \
-#     --per_device_train_batch_size 128 \
-#     --per_device_eval_batch_size 128 \
-#     --lr_scheduler_type cosine \
-#     --warmup_ratio 0.006 \
-#     --learning_rate 2e-3 \
-#     --bf16 \
-#     --do_train \
-#     --do_eval \
-#     --do_predict \
-#     --num_train_epochs 100 \
-#     --save_total_limit 3 \
-#     --save_strategy epoch \
-#     --evaluation_strategy epoch \
-#     --load_best_model_at_end True \
-#     --metric_for_best_model eval_loss \
-#     --report_to wandb \
-#     --run_name algpt2-tiny-long \
-#     --output_dir /tmp/test-clm-$RANDOM-`date +"%m-%d--%H-%M-%S"`
-
-# cyclegpt2 deepspeed
-deepspeed --master_port 60001 run_clm.py \
+# algpt2 deepspeed
+deepspeed --master_port $MASTER_PORT run_clm.py \
     --deepspeed ds_config.json \
-    --model_type cyclegpt2 \
-    --config_name configs/cyclegpt/config_tiny.json \
+    --model_type algpt2 \
+    --config_name configs/algpt/config_tiny.json \
+    --config_overrides loss_layers=1_3_5_7,loss_weights=0.25_0.25_0.25_0.25,use_sweet=true \
     --tokenizer_name gpt2 \
     --dataset_name wikitext \
     --dataset_config_name wikitext-103-raw-v1 \
-    --per_device_train_batch_size 64 \
-    --per_device_eval_batch_size 64 \
+    --per_device_train_batch_size 16 \
+    --per_device_eval_batch_size 16 \
     --lr_scheduler_type cosine \
     --warmup_ratio 0.02 \
-    --learning_rate 1e-3 \
+    --learning_rate 2e-3 \
     --bf16 \
     --do_train \
     --do_eval \
@@ -143,6 +128,33 @@ deepspeed --master_port 60001 run_clm.py \
     --evaluation_strategy epoch \
     --load_best_model_at_end True \
     --metric_for_best_model eval_loss \
-    --report_to wandb \
-    --run_name cyclegpt2-tiny-c2-1e-3 \
+    --report_to none \
     --output_dir /tmp/test-clm-$RANDOM-`date +"%m-%d--%H-%M-%S"`
+    # --run_name tmp-algpt2 \
+
+# # cyclegpt2 deepspeed
+# deepspeed --master_port $MASTER_PORT run_clm.py \
+#     --deepspeed ds_config.json \
+#     --model_type cyclegpt2 \
+#     --config_name configs/cyclegpt/config_tiny.json \
+#     --tokenizer_name gpt2 \
+#     --dataset_name wikitext \
+#     --dataset_config_name wikitext-103-raw-v1 \
+#     --per_device_train_batch_size 32 \
+#     --per_device_eval_batch_size 32 \
+#     --lr_scheduler_type cosine \
+#     --warmup_ratio 0.02 \
+#     --learning_rate 1e-3 \
+#     --bf16 \
+#     --do_train \
+#     --do_eval \
+#     --do_predict \
+#     --num_train_epochs 30 \
+#     --save_total_limit 3 \
+#     --save_strategy epoch \
+#     --evaluation_strategy epoch \
+#     --load_best_model_at_end True \
+#     --metric_for_best_model eval_loss \
+#     --report_to wandb \
+#     --run_name cyclegpt2-tiny-c2-1e-3 \
+#     --output_dir /tmp/test-clm-$RANDOM-`date +"%m-%d--%H-%M-%S"`
