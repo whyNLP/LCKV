@@ -27,6 +27,7 @@ class GPT2ConfigBase(_GPT2Config):
         use_sweet: bool = False,
         use_ln_head: bool = True,
         share_head: bool = False,
+        exit_strategy: str = "confidence",
         loss_layers: str = "-1",
         loss_weights: str = "1.0",
         exit_layers: str = "-1",
@@ -46,6 +47,16 @@ class GPT2ConfigBase(_GPT2Config):
             share_head (`bool`, *optional*, defaults to False):
                 Share the same prediction head for all exit transformer blocks. Suitable
                 for ALGPT2 which shares parameters for all transformer blocks.
+            exit_strategy (`str`, *optional*, defaults to "confidence"):
+                The strategy to exit early. The value should be one of "confidence",
+                "similarity".
+                - "confidence": exit when the model is confident enough. The model will
+                    exit when the probability of the predicted token is greater than the
+                    threshold.
+                - "similarity": exit when the model is similar enough. The model will
+                    exit when the cosine similarity between the hidden state in the 
+                    current layer and the hidden state in the last layer is greater than
+                    the threshold.
             loss_layers (`str`, *optional*, defaults to "-1"):
                 The layers to calculate loss. The layers are separated by underscore. The
                 default value is "-1", which means the last layer. The value "-2_-1" means
@@ -66,6 +77,7 @@ class GPT2ConfigBase(_GPT2Config):
         self.use_sweet = use_sweet
         self.use_ln_head = use_ln_head
         self.share_head = share_head
+        self.exit_strategy = exit_strategy
         self.loss_layers = loss_layers
         self.loss_weights = loss_weights
         self.exit_layers = exit_layers

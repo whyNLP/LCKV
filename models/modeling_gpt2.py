@@ -404,15 +404,22 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
         is_early_exit = False
         loss = None
         if not self.training and labels is not None:
-            # prepare to remember logits
-            exited_logits = torch.zeros(input_ids.size(0), input_ids.size(1), self.config.vocab_size, dtype=self.dtype, device=input_ids.device)
+            if self.config.exit_strategy == "confidence":
+                # prepare to remember logits
+                exited_logits = torch.zeros(input_ids.size(0), input_ids.size(1), self.config.vocab_size, dtype=self.dtype, device=input_ids.device)
+            elif self.config.exit_strategy == "similarity":
+                # prepare to remember hidden states
+                exited_hidden_states = torch.zeros(input_ids.size(0), input_ids.size(1), self.config.n_embd, dtype=self.dtype, device=input_ids.device)
             exited_indicator = torch.zeros(input_ids.size(0), input_ids.size(1), dtype=torch.bool, device=input_ids.device)
+        if not self.training and self.config.exit_strategy == "similarity":
+            # prepare to remember hidden states
+            previous_hidden_states = None
         if labels is not None:
             loss = 0.0
             shift_labels = labels[..., 1:].contiguous()
         
         def exit_callback(hidden_states: torch.Tensor, outputs: BaseModelOutputWithPastAndCrossAttentions, i: int):
-            nonlocal loss, is_early_exit, exited_logits, exited_indicator
+            nonlocal loss, is_early_exit, exited_logits, exited_hidden_states, exited_indicator, previous_hidden_states
 
             # we leave the last task for future
             if i == self.config.num_hidden_layers - 1:
@@ -438,14 +445,23 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
             elif labels is not None:
                 if i in self.exit_layers:
                     
-                    idx = self.loss_layers.index(i)
-                    logits: torch.Tensor = self.lm_heads[idx](hidden_states)
-
                     # collect the logits that are ready to exit
-                    exit_entries = logits.softmax(-1).max(-1)[0] >= self.config.exit_threshold
-                    exit_entries &= ~exited_indicator
-                    exited_indicator |= exit_entries
-                    exited_logits[exit_entries] = logits[exit_entries]
+                    if self.config.exit_strategy == "confidence":
+                        idx = self.loss_layers.index(i)
+                        logits: torch.Tensor = self.lm_heads[idx](hidden_states)
+                        exit_entries = logits.softmax(-1).max(-1)[0] >= self.config.exit_threshold
+                    
+                        exit_entries &= ~exited_indicator
+                        exited_indicator |= exit_entries
+                        logits = logits.to(dtype=self.dtype)
+                        exited_logits[exit_entries] = logits[exit_entries]
+                    
+                    elif self.config.exit_strategy == "similarity":
+                        exit_entries = torch.cosine_similarity(hidden_states, previous_hidden_states, dim=-1) >= self.config.exit_threshold
+
+                        exit_entries &= ~exited_indicator
+                        exited_indicator |= exit_entries
+                        exited_hidden_states[exit_entries] = hidden_states[exit_entries]
             
             # if we are doing real generation, we need to really exit early
             else:
@@ -482,6 +498,10 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
                         )
                     
                     return logits, outputs
+            
+            # if the exit strategy is similarity, we need to remember the hidden states
+            if self.config.exit_strategy == "similarity":
+                previous_hidden_states = hidden_states
 
             return hidden_states, None
 
@@ -523,7 +543,13 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
         elif labels is not None:
             # all entries must exit
             exit_entries = ~exited_indicator
-            exited_logits[exit_entries] = lm_logits[exit_entries]
+            if self.config.exit_strategy == "confidence":
+                lm_logits = lm_logits.to(dtype=self.dtype)
+                exited_logits[exit_entries] = lm_logits[exit_entries]
+            elif self.config.exit_strategy == "similarity":
+                exited_hidden_states[exit_entries] = previous_hidden_states[exit_entries]
+                exited_hidden_states = self.transformer.ln_f(exited_hidden_states)
+                exited_logits = self.lm_head(exited_hidden_states)
 
             # calculate loss
             labels = labels.to(lm_logits.device)
