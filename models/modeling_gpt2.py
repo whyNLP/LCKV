@@ -444,6 +444,10 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
             # during inference, we deal with early exit to calculate loss (but not really exit early)
             elif labels is not None:
                 if i in self.exit_layers:
+
+                    # reuse exited hidden states
+                    if previous_hidden_states is not None:
+                        hidden_states[exited_indicator] = previous_hidden_states[exited_indicator]
                     
                     # collect the logits that are ready to exit
                     if self.config.exit_strategy == "confidence":
