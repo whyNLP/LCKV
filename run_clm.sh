@@ -77,6 +77,8 @@ export ALGPT_FLASH_ATTN=1
 ## algpt2-xl      (bz12)  67G
 ## cyclegpt2-tiny (bz64)  44G
 
+## algpt2-tiny    (head=8, bz48) 44G
+
 
 # # gpt2 deepspeed
 # deepspeed --master_port 60000 run_clm.py \
@@ -104,39 +106,12 @@ export ALGPT_FLASH_ATTN=1
 #     --run_name gpt2-tiny \
 #     --output_dir /tmp/test-clm-$RANDOM-`date +"%m-%d--%H-%M-%S"`
 
-# algpt2 deepspeed
-deepspeed --master_port $MASTER_PORT run_clm.py \
-    --deepspeed ds_config.json \
-    --model_type algpt2 \
-    --config_name configs/algpt/config_tiny.json \
-    --config_overrides loss_layers=1_3_5_7,loss_weights=0.25_0.25_0.25_0.25,use_sweet=true \
-    --tokenizer_name gpt2 \
-    --dataset_name wikitext \
-    --dataset_config_name wikitext-103-raw-v1 \
-    --per_device_train_batch_size 16 \
-    --per_device_eval_batch_size 16 \
-    --lr_scheduler_type cosine \
-    --warmup_ratio 0.02 \
-    --learning_rate 2e-3 \
-    --bf16 \
-    --do_train \
-    --do_eval \
-    --do_predict \
-    --num_train_epochs 30 \
-    --save_total_limit 3 \
-    --save_strategy epoch \
-    --evaluation_strategy epoch \
-    --load_best_model_at_end True \
-    --metric_for_best_model eval_loss \
-    --report_to none \
-    --output_dir /tmp/test-clm-$RANDOM-`date +"%m-%d--%H-%M-%S"`
-    # --run_name tmp-algpt2 \
-
-# # cyclegpt2 deepspeed
+# # algpt2 deepspeed
 # deepspeed --master_port $MASTER_PORT run_clm.py \
 #     --deepspeed ds_config.json \
-#     --model_type cyclegpt2 \
-#     --config_name configs/cyclegpt/config_tiny.json \
+#     --model_type algpt2 \
+#     --config_name configs/algpt/config_tiny.json \
+#     --config_overrides n_layer=8 \
 #     --tokenizer_name gpt2 \
 #     --dataset_name wikitext \
 #     --dataset_config_name wikitext-103-raw-v1 \
@@ -144,7 +119,8 @@ deepspeed --master_port $MASTER_PORT run_clm.py \
 #     --per_device_eval_batch_size 32 \
 #     --lr_scheduler_type cosine \
 #     --warmup_ratio 0.02 \
-#     --learning_rate 1e-3 \
+#     --learning_rate 2e-3 \
+#     --weight_decay 1e-5 \
 #     --bf16 \
 #     --do_train \
 #     --do_eval \
@@ -156,5 +132,144 @@ deepspeed --master_port $MASTER_PORT run_clm.py \
 #     --load_best_model_at_end True \
 #     --metric_for_best_model eval_loss \
 #     --report_to wandb \
-#     --run_name cyclegpt2-tiny-c2-1e-3 \
+#     --run_name algpt2-nlayer8 \
+#     --output_dir /tmp/test-clm-$RANDOM-`date +"%m-%d--%H-%M-%S"`
+#     # --output_dir /home/wuhy/projects/algpt/ALGPT/outputs/algpt2-nlayer8
+
+# # cyclegpt2 deepspeed
+# deepspeed --master_port $MASTER_PORT run_clm.py \
+#     --deepspeed ds_config.json \
+#     --model_type cyclegpt2 \
+#     --config_name configs/cyclegpt/config_tiny.json \
+#     --tokenizer_name gpt2 \
+#     --config_overrides loss_layers=15_23,loss_weights=0.2_1,cycles=3,n_layer=24 \
+#     --dataset_name wikitext \
+#     --dataset_config_name wikitext-103-raw-v1 \
+#     --per_device_train_batch_size 32 \
+#     --per_device_eval_batch_size 32 \
+#     --lr_scheduler_type cosine \
+#     --warmup_ratio 0.02 \
+#     --learning_rate 2e-3 \
+#     --bf16 \
+#     --do_train \
+#     --do_eval \
+#     --do_predict \
+#     --num_train_epochs 30 \
+#     --save_total_limit 3 \
+#     --save_strategy epoch \
+#     --evaluation_strategy epoch \
+#     --load_best_model_at_end True \
+#     --metric_for_best_model eval_loss \
+#     --report_to wandb \
+#     --run_name cyclegpt2-tiny-2loss-l24 \
+#     --output_dir /tmp/test-clm-$RANDOM-`date +"%m-%d--%H-%M-%S"`
+
+
+# ==================================================================================================
+# # algpt2 deepspeed TEST
+# deepspeed --master_port $MASTER_PORT run_clm.py \
+#     --deepspeed ds_config.json \
+#     --model_type algpt2 \
+#     --config_name configs/algpt/config_tiny.json \
+#     --config_overrides loss_layers=-1,loss_weights=1,exit_layers=1_2_3_4_5_6_7,exit_threshold=0.99,use_sweet=false,n_layer=8,exit_strategy=similarity \
+#     --tokenizer_name gpt2 \
+#     --dataset_name wikitext \
+#     --dataset_config_name wikitext-103-raw-v1 \
+#     --per_device_train_batch_size 32 \
+#     --per_device_eval_batch_size 32 \
+#     --lr_scheduler_type cosine \
+#     --warmup_ratio 0.02 \
+#     --learning_rate 2e-3 \
+#     --bf16 \
+#     --do_train \
+#     --do_eval \
+#     --do_predict \
+#     --max_steps 30 \
+#     --save_total_limit 3 \
+#     --save_strategy steps \
+#     --evaluation_strategy steps \
+#     --eval_steps 10 \
+#     --load_best_model_at_end True \
+#     --metric_for_best_model eval_loss \
+#     --report_to none \
+#     --output_dir /tmp/test-clm-$RANDOM-`date +"%m-%d--%H-%M-%S"`
+#     # --run_name tmp-algpt2 \
+#     # --config_overrides loss_layers=-1,loss_weights=1,exit_layers=1_2_3_4_5_6_7,exit_threshold=0.99,use_sweet=false,n_layer=8,exit_strategy=confidence \
+
+
+# # algpt2 deepspeed
+# deepspeed --master_port $MASTER_PORT run_clm.py \
+#     --deepspeed ds_config.json \
+#     --model_type algpt2 \
+#     --config_name configs/algpt/config_tiny.json \
+#     --config_overrides loss_layers=-1,loss_weights=1,exit_layers=1_2_3_4_5_6_7,exit_threshold=0.99,use_sweet=false,n_layer=8,exit_strategy=similarity \
+#     --tokenizer_name gpt2 \
+#     --dataset_name wikitext \
+#     --dataset_config_name wikitext-103-raw-v1 \
+#     --per_device_train_batch_size 32 \
+#     --per_device_eval_batch_size 32 \
+#     --lr_scheduler_type cosine \
+#     --warmup_ratio 0.02 \
+#     --learning_rate 2e-3 \
+#     --bf16 \
+#     --do_train \
+#     --do_eval \
+#     --do_predict \
+#     --num_train_epochs 30 \
+#     --save_total_limit 3 \
+#     --save_strategy epoch \
+#     --evaluation_strategy epoch \
+#     --load_best_model_at_end True \
+#     --metric_for_best_model eval_loss \
+#     --report_to none \
+#     --output_dir /tmp/test-clm-$RANDOM-`date +"%m-%d--%H-%M-%S"`
+#     # --run_name tmp-algpt2 \
+
+# # algpt2 inference
+# python run_clm.py \
+#     --model_name_or_path /home/wuhy/projects/algpt/ALGPT/outputs/algpt2-nlayer24 \
+#     --config_name /home/wuhy/projects/algpt/ALGPT/outputs/algpt2-nlayer24 \
+#     --config_overrides n_layer=4 \
+#     --tokenizer_name gpt2 \
+#     --dataset_name wikitext \
+#     --dataset_config_name wikitext-103-raw-v1 \
+#     --per_device_train_batch_size 32 \
+#     --per_device_eval_batch_size 32 \
+#     --lr_scheduler_type cosine \
+#     --warmup_ratio 0.02 \
+#     --learning_rate 2e-3 \
+#     --bf16 \
+#     --do_eval \
+#     --max_steps 30 \
+#     --save_total_limit 3 \
+#     --save_strategy steps \
+#     --evaluation_strategy steps \
+#     --eval_steps 10 \
+#     --load_best_model_at_end True \
+#     --metric_for_best_model eval_loss \
+#     --report_to none \
+#     --output_dir /tmp/test-clm-$RANDOM-`date +"%m-%d--%H-%M-%S"`
+
+# # cyclegpt2 inference
+# python run_clm.py \
+#     --model_name_or_path /tmp/test-clm-5581-10-25--19-12-26 \
+#     --config_name /tmp/test-clm-5581-10-25--19-12-26 \
+#     --tokenizer_name gpt2 \
+#     --config_overrides loss_layers=-1,loss_weights=1,exit_layers=-1,cycles=5,n_layer=40 \
+#     --dataset_name wikitext \
+#     --dataset_config_name wikitext-103-raw-v1 \
+#     --per_device_train_batch_size 32 \
+#     --per_device_eval_batch_size 32 \
+#     --lr_scheduler_type cosine \
+#     --warmup_ratio 0.02 \
+#     --learning_rate 2e-3 \
+#     --bf16 \
+#     --do_eval \
+#     --num_train_epochs 30 \
+#     --save_total_limit 3 \
+#     --save_strategy epoch \
+#     --evaluation_strategy epoch \
+#     --load_best_model_at_end True \
+#     --metric_for_best_model eval_loss \
+#     --report_to none \
 #     --output_dir /tmp/test-clm-$RANDOM-`date +"%m-%d--%H-%M-%S"`
