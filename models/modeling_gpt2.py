@@ -411,7 +411,7 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
                 # prepare to remember hidden states
                 exited_hidden_states = torch.zeros(input_ids.size(0), input_ids.size(1), self.config.n_embd, dtype=self.dtype, device=input_ids.device)
             exited_indicator = torch.zeros(input_ids.size(0), input_ids.size(1), dtype=torch.bool, device=input_ids.device)
-        if not self.training and self.config.exit_strategy == "similarity":
+        if not self.training:
             # prepare to remember hidden states
             previous_hidden_states = None
         if labels is not None:
@@ -503,9 +503,10 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
                     
                     return logits, outputs
             
-            # if the exit strategy is similarity, we need to remember the hidden states
-            if self.config.exit_strategy == "similarity":
-                previous_hidden_states = hidden_states
+            # we need to remember the hidden states for early exit
+            # XXX: do we need to use clone? from the code for all_hidden_states, I think
+            #      it might not be necessary.
+            previous_hidden_states = hidden_states
 
             return hidden_states, None
 
