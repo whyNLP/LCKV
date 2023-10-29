@@ -1,5 +1,6 @@
 from .configuration_gpt2 import GPT2Config, ALGPT2Config, CycleGPT2Config
 from .modeling_gpt2 import GPT2LMHeadModel, ALGPT2LMHeadModel, CycleGPT2LMHeadModel
+from .wandb_callback import WandbCallback
 
 from transformers import CONFIG_MAPPING, MODEL_FOR_CAUSAL_LM_MAPPING
 CONFIG_MAPPING.register("gpt2", GPT2Config, exist_ok = True)

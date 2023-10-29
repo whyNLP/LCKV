@@ -362,6 +362,9 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
         # Loss func
         self.loss_func = CrossEntropyLoss()
 
+        # custom log
+        self._custom_log = dict()
+
         # Model parallel
         self.model_parallel = False
         self.device_map = None
@@ -403,6 +406,7 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
         # preparation for early exit
         is_early_exit = False
         loss = None
+        _custom_log = dict()
         if not self.training and labels is not None:
             if self.config.exit_strategy == "confidence":
                 # prepare to remember logits
@@ -419,7 +423,7 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
             shift_labels = labels[..., 1:].contiguous()
         
         def exit_callback(hidden_states: torch.Tensor, outputs: BaseModelOutputWithPastAndCrossAttentions, i: int):
-            nonlocal loss, is_early_exit, exited_logits, exited_hidden_states, exited_indicator, previous_hidden_states
+            nonlocal loss, is_early_exit, exited_logits, exited_hidden_states, exited_indicator, previous_hidden_states, _custom_log
 
             # we leave the last task for future
             if i == self.config.num_hidden_layers - 1:
@@ -439,7 +443,12 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
 
                     # calculate loss
                     shift_logits = logits[..., :-1, :].contiguous()
-                    loss += self.loss_weights[idx] * self.loss_func(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+                    layer_loss = self.loss_func(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+                    loss += self.loss_weights[idx] * layer_loss
+
+                    # add to custom log
+                    layer_loss = layer_loss.item()
+                    _custom_log.update({f'train_loss_layer_{str(i)}': layer_loss})
 
             # during inference, we deal with early exit to calculate loss (but not really exit early)
             elif labels is not None:
@@ -544,7 +553,11 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
             # Shift so that tokens < n predict n
             shift_logits = lm_logits[..., :-1, :].contiguous()
             # Flatten the tokens
-            loss += self.loss_weights[-1] * self.loss_func(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            layer_loss = self.loss_func(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss += self.loss_weights[-1] * layer_loss
+            # add to custom log
+            layer_loss = layer_loss.item()
+            _custom_log.update({f'train_loss_layer_{str(self.config.num_hidden_layers-1)}': layer_loss})
         elif labels is not None:
             # all entries must exit
             exit_entries = ~exited_indicator
@@ -573,6 +586,9 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+
+        # register custom log
+        self._custom_log = _custom_log
 
         if not return_dict:
             output = (lm_logits,) + transformer_outputs[1:]
