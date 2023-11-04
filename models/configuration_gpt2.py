@@ -93,8 +93,6 @@ class GPT2ConfigBase(_GPT2Config):
             raise ValueError("The number of loss layers should be equal to the number of loss weights.")
         if self.exit_threshold <= 0 or self.exit_threshold > 1:
             raise ValueError("The exit threshold should be in (0, 1].")
-        if not set(loss_layers).issuperset(set(exit_layers)):
-            raise ValueError("The exit layers should be in the loss layers.")
         if (self.n_layer - 1) not in exit_layers: # XXX: is this necessary?
             raise ValueError("The last layer should be in the exit layers.")
         if (self.n_layer - 1) not in loss_layers:

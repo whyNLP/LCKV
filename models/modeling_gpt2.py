@@ -460,8 +460,8 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
                     
                     # collect the logits that are ready to exit
                     if self.config.exit_strategy == "confidence":
-                        idx = self.loss_layers.index(i)
-                        logits: torch.Tensor = self.lm_heads[idx](hidden_states)
+                        lm_head = self.lm_heads[self.loss_layers.index(i)] if i in self.loss_layers else self.lm_head
+                        logits: torch.Tensor = lm_head(hidden_states)
                         exit_entries = logits.softmax(-1).max(-1)[0] >= self.config.exit_threshold
                     
                         exit_entries &= ~exited_indicator
@@ -470,8 +470,8 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
                         exited_logits[exit_entries] = logits[exit_entries]
                     
                     elif self.config.exit_strategy == "softmax":
-                        idx = self.loss_layers.index(i)
-                        logits: torch.Tensor = self.lm_heads[idx](hidden_states)
+                        lm_head = self.lm_heads[self.loss_layers.index(i)] if i in self.loss_layers else self.lm_head
+                        logits: torch.Tensor = lm_head(hidden_states)
                         maximums, _ = logits.softmax(-1).topk(2, dim=-1)
                         exit_entries = (maximums[..., 0] - maximums[..., 1]) >= self.config.exit_threshold
                     
@@ -489,39 +489,56 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
             
             # if we are doing real generation, we need to really exit early
             else:
-                raise NotImplementedError("Early exit is not yet implemented for realy generation.")
-            
-                # TODO: duplicated codes, requires revision
+                # we first implement a simple version that only supports batch size = 1
+                if hidden_states.size(0) != 1:
+                    raise NotImplementedError("Early exit with batch size > 1 is not yet implemented for realy generation.")
+                
                 if i in self.exit_layers:
-                    idx = self.loss_layers.index(i)
-                    logits: torch.Tensor = self.lm_heads[idx](hidden_states)
+                    lm_head = self.lm_heads[self.loss_layers.index(i)] if i in self.loss_layers else self.lm_head
+                    logits: torch.Tensor = lm_head(hidden_states)
 
                     # see if the model is confident enough to exit
-                    if logits[..., -1, :].softmax(-1).max().item() < self.config.exit_threshold:
-                        return hidden_states, None
+                    if self.config.exit_strategy == "confidence":
+                        if logits[..., -1, :].softmax(-1).max().item() >= self.config.exit_threshold:
+                            is_early_exit = True
+                    elif self.config.exit_strategy == "softmax":
+                        maximums, _ = logits[..., -1, :].softmax(-1).topk(2, dim=-1)
+                        if (maximums[..., 0] - maximums[..., 1]).item() >= self.config.exit_threshold:
+                            is_early_exit = True
+                    elif self.config.exit_strategy == "similarity":
+                        if torch.cosine_similarity(hidden_states[..., -1, :], previous_hidden_states[..., -1, :], dim=-1).item() >= self.config.exit_threshold:
+                            is_early_exit = True
                         
                     # ready to exit
-                    is_early_exit = True
+                    if is_early_exit:
 
-                    if output_hidden_states:
-                        all_hidden_states = outputs.hidden_states + (logits,)
+                        # one important thing is to prepare the kv cache, just repeat the last kv
+                        past_key_values = outputs.past_key_values
+                        if past_key_values is not None:
+                            last_kv = past_key_values[-1]
+                            past_key_values = past_key_values + tuple(last_kv for _ in range(self.config.num_hidden_layers - i - 1))
 
-                    if not return_dict:
-                        outputs = tuple(
-                            v
-                            for v in [logits, outputs.past_key_values, all_hidden_states, outputs.attentions, outputs.cross_attentions]
-                            if v is not None
-                        )
-                    else:
-                        outputs = BaseModelOutputWithPastAndCrossAttentions(
-                            last_hidden_state=logits,
-                            past_key_values=outputs.past_key_values,
-                            hidden_states=all_hidden_states,
-                            attentions=outputs.attentions,
-                            cross_attentions=outputs.cross_attentions,
-                        )
-                    
-                    return logits, outputs
+                        if output_hidden_states:
+                            all_hidden_states = outputs.hidden_states + (logits,)
+                        else:
+                            all_hidden_states = outputs.hidden_states
+
+                        if not return_dict:
+                            outputs = tuple(
+                                v
+                                for v in [logits, past_key_values, all_hidden_states, outputs.attentions, outputs.cross_attentions]
+                                if v is not None
+                            )
+                        else:
+                            outputs = BaseModelOutputWithPastAndCrossAttentions(
+                                last_hidden_state=logits,
+                                past_key_values=past_key_values,
+                                hidden_states=all_hidden_states,
+                                attentions=outputs.attentions,
+                                cross_attentions=outputs.cross_attentions,
+                            )
+                        
+                        return logits, outputs
             
             # we need to remember the hidden states for early exit
             # XXX: do we need to use clone? from the code for all_hidden_states, I think
@@ -556,6 +573,8 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
         # do the last classification if not early exit
         if not is_early_exit:
             lm_logits = self.lm_head(hidden_states)
+        else:
+            lm_logits = hidden_states
 
         # deal with the last layer
         if self.training:
@@ -586,17 +605,7 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
             shift_logits = exited_logits[..., :-1, :].contiguous()
             # Flatten the tokens
             loss = self.loss_func(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-        else:
-            raise NotImplementedError("Early exit is not yet implemented for realy generation.")
 
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(lm_logits.device)
-            # Shift so that tokens < n predict n
-            shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
         # register custom log
         self._custom_log = _custom_log
