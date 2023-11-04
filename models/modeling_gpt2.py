@@ -408,7 +408,7 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
         loss = None
         _custom_log = dict()
         if not self.training and labels is not None:
-            if self.config.exit_strategy == "confidence":
+            if self.config.exit_strategy in ("confidence", "softmax"):
                 # prepare to remember logits
                 exited_logits = torch.zeros(input_ids.size(0), input_ids.size(1), self.config.vocab_size, dtype=self.dtype, device=input_ids.device)
             elif self.config.exit_strategy == "similarity":
@@ -463,6 +463,17 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
                         idx = self.loss_layers.index(i)
                         logits: torch.Tensor = self.lm_heads[idx](hidden_states)
                         exit_entries = logits.softmax(-1).max(-1)[0] >= self.config.exit_threshold
+                    
+                        exit_entries &= ~exited_indicator
+                        exited_indicator |= exit_entries
+                        logits = logits.to(dtype=self.dtype)
+                        exited_logits[exit_entries] = logits[exit_entries]
+                    
+                    elif self.config.exit_strategy == "softmax":
+                        idx = self.loss_layers.index(i)
+                        logits: torch.Tensor = self.lm_heads[idx](hidden_states)
+                        maximums, _ = logits.softmax(-1).topk(2, dim=-1)
+                        exit_entries = (maximums[..., 0] - maximums[..., 1]) >= self.config.exit_threshold
                     
                         exit_entries &= ~exited_indicator
                         exited_indicator |= exit_entries
@@ -561,7 +572,7 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
         elif labels is not None:
             # all entries must exit
             exit_entries = ~exited_indicator
-            if self.config.exit_strategy == "confidence":
+            if self.config.exit_strategy in ("confidence", "softmax"):
                 lm_logits = lm_logits.to(dtype=self.dtype)
                 exited_logits[exit_entries] = lm_logits[exit_entries]
             elif self.config.exit_strategy == "similarity":

@@ -57,6 +57,8 @@ class GPT2ConfigBase(_GPT2Config):
                     exit when the cosine similarity between the hidden state in the 
                     current layer and the hidden state in the last layer is greater than
                     the threshold.
+                - "softmax": we take the difference between the top two values of softmax.
+                    If the difference is greater than the threshold, we exit.
             loss_layers (`str`, *optional*, defaults to "-1"):
                 The layers to calculate loss. The layers are separated by underscore. The
                 default value is "-1", which means the last layer. The value "-2_-1" means
