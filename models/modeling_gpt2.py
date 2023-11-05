@@ -427,6 +427,13 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
 
             # we leave the last task for future
             if i == self.config.num_hidden_layers - 1:
+
+                # register custom log
+                if not self.training and labels is None:
+                    _custom_log.update({
+                        'early_exit_layers': self._custom_log.get('early_exit_layers', tuple()) + (i, )
+                    })
+                
                 return hidden_states, None
 
             # during training, we calculate loss from specific layers
@@ -512,7 +519,14 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
                     # ready to exit
                     if is_early_exit:
 
+                        # register custom log
+                        _custom_log.update({
+                            'early_exit_layers': self._custom_log.get('early_exit_layers', tuple()) + (i, )
+                        })
+
                         # one important thing is to prepare the kv cache, just repeat the last kv
+                        # shold be shape: layers x (past_key, past_value)
+                        # FIXME: THIS IS NOT CORRECT
                         past_key_values = outputs.past_key_values
                         if past_key_values is not None:
                             last_kv = past_key_values[-1]

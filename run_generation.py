@@ -470,6 +470,20 @@ def main():
         generated_sequences.append(total_sequence)
         print(total_sequence)
 
+        # print the generated tokens along with the exited layers
+        _custom_log = getattr(model, "_custom_log", {})
+        early_exit_layers = _custom_log.get("early_exit_layers", tuple())
+        token_list = tokenizer.convert_ids_to_tokens(generated_sequence)
+        encoded_length = len(encoded_prompt[0])
+        sequence_with_exit_layer = []
+        for token in token_list[:encoded_length]:
+            sequence_with_exit_layer.append(token)
+        for token, exit_layer in zip(token_list[encoded_length:], early_exit_layers):
+            sequence_with_exit_layer.append(f"{token}({exit_layer + 1})")
+        print(f"=== GENERATED TOKENS WITH EXIT LAYERS {generated_sequence_idx + 1} ===")
+        print(" ".join(sequence_with_exit_layer))
+
+
     return generated_sequences
 
 
