@@ -639,10 +639,13 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
 
 
 class GPT2LMHeadModel(GPT2LMHeadModelBase):
+    config_class = GPT2Config
     TSFM_CLASS = GPT2Model
 
 class ALGPT2LMHeadModel(GPT2LMHeadModelBase):
+    config_class = ALGPT2Config
     TSFM_CLASS = ALGPT2Model
 
 class CycleGPT2LMHeadModel(GPT2LMHeadModelBase):
+    config_class = CycleGPT2Config
     TSFM_CLASS = CycleGPT2Model
