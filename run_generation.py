@@ -472,20 +472,58 @@ def main():
 
         # print the generated tokens along with the exited layers
         _custom_log = getattr(model, "_custom_log", {})
-        early_exit_layers = _custom_log.get("early_exit_layers", tuple())
-        token_list = tokenizer.convert_ids_to_tokens(generated_sequence)
-        encoded_length = len(encoded_prompt[0])
-        sequence_with_exit_layer = []
-        for token in token_list[:encoded_length]:
-            sequence_with_exit_layer.append(token)
-        for token, exit_layer in zip(token_list[encoded_length:], early_exit_layers):
-            sequence_with_exit_layer.append(f"{token}({exit_layer + 1})")
-        print(f"=== GENERATED TOKENS WITH EXIT LAYERS {generated_sequence_idx + 1} ===")
-        print(" ".join(sequence_with_exit_layer))
-
+        if "early_exit_layers" in _custom_log:
+            early_exit_layers = _custom_log.get("early_exit_layers", tuple())
+            early_exit_layers = [x + 1 for x in early_exit_layers] # index starts from 0, now starts from 1
+            token_list = tokenizer.convert_ids_to_tokens(generated_sequence)
+            encoded_length = len(encoded_prompt[0])
+            sequence_with_exit_layer = []
+            for token in token_list[:encoded_length]:
+                sequence_with_exit_layer.append(token)
+            min_level, max_level = min(early_exit_layers), max(early_exit_layers)
+            for token, exit_layer in zip(token_list[encoded_length:], early_exit_layers):
+                sequence_with_exit_layer.append(print_w_level(token, exit_layer, min_level, max_level))
+            print(f"=== GENERATED TOKENS WITH EXIT LAYERS {generated_sequence_idx + 1} ===")
+            print(" ".join(sequence_with_exit_layer))
 
     return generated_sequences
 
+
+def print_w_level(text: str, level: int = None, min_level: int = 1, max_level: int = None):
+    """
+    level is a integer such that min_level <= level <= max_level.
+    """
+    if level is None:
+        return text
+    
+    if max_level - min_level == 0:
+        return f"{text}({level})"
+
+    # default levels
+    levels = [
+        "\033[32;1m", # bright green
+        "\033[32;22m", # normal green
+        "\033[33;22m", # normal yellow
+        "\033[31;22m", # normal red
+        "\033[31;1m", # bright red
+    ]
+
+    # more detailed levels
+    # levels = [
+    #     "\033[32;1m", # bright green
+    #     "\033[32;22m", # normal green
+    #     "\033[32;2m", # dark green
+    #     "\033[33;2m", # dark yellow
+    #     "\033[31;2m", # dark red
+    #     "\033[31;22m", # normal red
+    #     "\033[31;1m", # bright red
+    # ]
+
+    reset = "\033[0m"
+
+    percetage = (level - min_level) / (max_level - min_level)
+    idx = int(percetage * (len(levels) - 1))
+    return f"{levels[idx]}{text}({level}){reset}"
 
 if __name__ == "__main__":
     main()
