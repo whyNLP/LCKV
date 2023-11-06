@@ -423,7 +423,7 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
             shift_labels = labels[..., 1:].contiguous()
         
         def exit_callback(hidden_states: torch.Tensor, outputs: BaseModelOutputWithPastAndCrossAttentions, i: int):
-            nonlocal loss, is_early_exit, exited_logits, exited_hidden_states, exited_indicator, previous_hidden_states, _custom_log
+            nonlocal loss, is_early_exit, exited_logits, exited_hidden_states, exited_indicator, previous_hidden_states, _custom_log, past_key_values
 
             # we leave the last task for future
             if i == self.config.num_hidden_layers - 1:
@@ -526,11 +526,19 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
 
                         # one important thing is to prepare the kv cache, just repeat the last kv
                         # shold be shape: layers x (past_key, past_value)
-                        # FIXME: THIS IS NOT CORRECT
-                        past_key_values = outputs.past_key_values
-                        if past_key_values is not None:
-                            last_kv = past_key_values[-1]
-                            past_key_values = past_key_values + tuple(last_kv for _ in range(self.config.num_hidden_layers - i - 1))
+                        presents = outputs.past_key_values
+                        if presents is not None:
+                            _, seq_len = input_ids.size()
+                            last_key, last_value = presents[-1]
+                            last_key, last_value = last_key[..., -seq_len:, :], last_value[..., -seq_len:, :]
+                            for j in range(i + 1, self.config.num_hidden_layers):
+                                if past_key_values is None:
+                                    key, value = last_key, last_value
+                                else:
+                                    past_key, past_value = past_key_values[j]
+                                    key = torch.cat((past_key, last_key), dim=-2)
+                                    value = torch.cat((past_value, last_value), dim=-2)
+                                presents = presents + ((key, value), )
 
                         if output_hidden_states:
                             all_hidden_states = outputs.hidden_states + (logits,)
@@ -540,13 +548,13 @@ class GPT2LMHeadModelBase(_GPT2LMHeadModel):
                         if not return_dict:
                             outputs = tuple(
                                 v
-                                for v in [logits, past_key_values, all_hidden_states, outputs.attentions, outputs.cross_attentions]
+                                for v in [logits, presents, all_hidden_states, outputs.attentions, outputs.cross_attentions]
                                 if v is not None
                             )
                         else:
                             outputs = BaseModelOutputWithPastAndCrossAttentions(
                                 last_hidden_state=logits,
-                                past_key_values=past_key_values,
+                                past_key_values=presents,
                                 hidden_states=all_hidden_states,
                                 attentions=outputs.attentions,
                                 cross_attentions=outputs.cross_attentions,
