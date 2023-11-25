@@ -54,7 +54,7 @@ class FixedDropout(torch.nn.Module):
 
     def __init__(self, p=0.05, inplace=False) -> None:
         super().__init__()
-        self.dropout_rate = p
+        self.p = p
         self.inplace = inplace
         self.refresh()
     
@@ -63,12 +63,12 @@ class FixedDropout(torch.nn.Module):
     
     def get_mask(self, x):
         if x.size() not in self.m:
-            m = x.bernoulli_(1 - self.dropout_rate) / (1 - self.dropout_rate)
+            m = x.bernoulli_(1 - self.p) / (1 - self.p)
             self.m[x.size()] = m
         return self.m[x.size()]
 
     def forward(self, x):
-        if not self.training or not self.dropout_rate:
+        if not self.training or not self.p:
             return x
 
         m = self.get_mask(x)
@@ -78,7 +78,7 @@ class FixedDropout(torch.nn.Module):
 
     def extra_repr(self):
         inplace_str = ", inplace" if self.inplace else ""
-        return f"p={self.dropout_rate}{inplace_str}"
+        return f"p={self.p}{inplace_str}"
 
 
 class GPT2ModelBase(_GPT2Model):
@@ -101,6 +101,13 @@ class GPT2ModelBase(_GPT2Model):
         self.initialize_modules(config)
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
+        # switch to fixed dropout
+        if config.use_fixed_dropout:
+            for block in self.h:
+                block.attn.attn_dropout = FixedDropout(config.attn_pdrop)
+                block.attn.resid_dropout = FixedDropout(config.resid_pdrop)
+                block.mlp.dropout = FixedDropout(config.resid_pdrop)
+
         # Model parallel
         self.model_parallel = False
         self.device_map = None
@@ -116,13 +123,6 @@ class GPT2ModelBase(_GPT2Model):
         """
         self.h = nn.ModuleList([GPT2Block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
 
-        # switch to fixed dropout
-        if config.use_fixed_dropout:
-            for block in self.h:
-                block.attn.attn_dropout = FixedDropout(config.attn_pdrop)
-                block.attn.resid_dropout = FixedDropout(config.resid_pdrop)
-                block.mlp.dropout = FixedDropout(config.resid_pdrop)
-    
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
