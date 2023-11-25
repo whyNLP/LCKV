@@ -46,6 +46,40 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "gpt2"
 _CONFIG_FOR_DOC = "GPT2Config"
 
+class FixedDropout(torch.nn.Module):
+    """Implementation of fixed dropout.
+
+    It will dropout the same set of entries for each layer.
+    """
+
+    def __init__(self, p=0.05, inplace=False) -> None:
+        super().__init__()
+        self.dropout_rate = p
+        self.inplace = inplace
+        self.refresh()
+    
+    def refresh(self):
+        self.m = {}
+    
+    def get_mask(self, x):
+        if x.size() not in self.m:
+            m = x.bernoulli_(1 - self.dropout_rate) / (1 - self.dropout_rate)
+            self.m[x.size()] = m
+        return self.m[x.size()]
+
+    def forward(self, x):
+        if not self.training or not self.dropout_rate:
+            return x
+
+        m = self.get_mask(x)
+
+        mask = torch.autograd.Variable(m, requires_grad=False)
+        return mask * x
+
+    def extra_repr(self):
+        inplace_str = ", inplace" if self.inplace else ""
+        return f"p={self.dropout_rate}{inplace_str}"
+
 
 class GPT2ModelBase(_GPT2Model):
     """
@@ -81,6 +115,13 @@ class GPT2ModelBase(_GPT2Model):
         be called in `self.__init__`.
         """
         self.h = nn.ModuleList([GPT2Block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+
+        # switch to fixed dropout
+        if config.use_fixed_dropout:
+            for block in self.h:
+                block.attn.attn_dropout = FixedDropout(config.attn_pdrop)
+                block.attn.resid_dropout = FixedDropout(config.resid_pdrop)
+                block.mlp.dropout = FixedDropout(config.resid_pdrop)
     
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

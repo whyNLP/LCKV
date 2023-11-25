@@ -26,6 +26,7 @@ class GPT2ConfigBase(_GPT2Config):
         self,
         use_sweet: bool = False,
         use_ln_head: bool = True,
+        use_fixed_dropout: bool = False,
         share_head: bool = False,
         exit_strategy: str = "confidence",
         loss_layers: str = "-1",
@@ -44,6 +45,11 @@ class GPT2ConfigBase(_GPT2Config):
             use_ln_head (`bool`, *optional*, defaults to True):
                 Add a layer norm before each prediction head. This is consistent with GPT2
                 structure, which has a layer norm at the end of transformer blocks.
+            use_fixed_dropout (`bool`, *optional*, defaults to False):
+                Use fixed dropout instead of random dropout. Since we are tying the
+                weights of the layers, we might want to dropout the same entries in
+                corresponding layers. This will not affect gpt2 models, which does not
+                share weights between layers.
             share_head (`bool`, *optional*, defaults to False):
                 Share the same prediction head for all exit transformer blocks. Suitable
                 for ALGPT2 which shares parameters for all transformer blocks.
@@ -78,6 +84,7 @@ class GPT2ConfigBase(_GPT2Config):
         super().__init__(**kwargs)
         self.use_sweet = use_sweet
         self.use_ln_head = use_ln_head
+        self.use_fixed_dropout = use_fixed_dropout
         self.share_head = share_head
         self.exit_strategy = exit_strategy
         self.loss_layers = loss_layers
