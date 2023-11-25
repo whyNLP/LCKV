@@ -237,6 +237,13 @@ class GPT2ModelBase(_GPT2Model):
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
+        
+        # reset fixed dropouts
+        if self.config.use_fixed_dropout:
+            for block in self.h:
+                block.attn.attn_dropout.refresh()
+                block.attn.resid_dropout.refresh()
+                block.mlp.dropout.refresh()
 
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
