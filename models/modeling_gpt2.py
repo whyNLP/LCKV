@@ -63,7 +63,7 @@ class FixedDropout(torch.nn.Module):
     
     def get_mask(self, x):
         if x.size() not in self.m:
-            m = x.bernoulli_(1 - self.p) / (1 - self.p)
+            m = x.data.new(x.size()).bernoulli_(1 - self.p) / (1 - self.p)
             self.m[x.size()] = m
         return self.m[x.size()]
 
