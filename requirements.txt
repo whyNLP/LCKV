@@ -4,5 +4,7 @@ datasets
 evaluate
 scikit-learn
 deepspeed
+packaging
+git+https://github.com/Dao-AILab/flash-attention#subdirectory=csrc/layer_norm
 
-flash-attn == 2.1.1
+flash-attn >= 2.2.3
