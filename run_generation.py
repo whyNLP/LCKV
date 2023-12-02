@@ -35,10 +35,10 @@ from transformers import (
     CTRLLMHeadModel,
     CTRLTokenizer,
     GenerationMixin,
-    # GPT2LMHeadModel,
+    GPT2LMHeadModel as _GPT2LMHeadModel,
     GPT2Tokenizer,
     GPTJForCausalLM,
-    LlamaForCausalLM,
+    LlamaForCausalLM as _LlamaForCausalLM,
     LlamaTokenizer,
     OpenAIGPTLMHeadModel,
     OpenAIGPTTokenizer,
@@ -51,8 +51,12 @@ from transformers import (
     XLNetTokenizer,
 )
 from transformers.modeling_outputs import CausalLMOutputWithPast
-from models import GPT2LMHeadModel, ALGPT2LMHeadModel, CycleGPT2LMHeadModel
-from transformers import GPT2LMHeadModel as _GPT2LMHeadModel
+from models import (
+    GPT2LMHeadModel,
+    ALGPT2LMHeadModel,
+    CycleGPT2LMHeadModel,
+    LlamaForCausalLM
+)
 
 
 logging.basicConfig(
@@ -66,6 +70,7 @@ MAX_LENGTH = int(10000)  # Hardcoded max length to avoid infinite loop
 
 MODEL_CLASSES = {
     "origin-gpt2": (_GPT2LMHeadModel, GPT2Tokenizer),
+    "origin-llama": (_LlamaForCausalLM, LlamaTokenizer),
     "algpt2": (ALGPT2LMHeadModel, GPT2Tokenizer),
     "cyclegpt2": (CycleGPT2LMHeadModel, GPT2Tokenizer),
     "gpt2": (GPT2LMHeadModel, GPT2Tokenizer),
@@ -306,6 +311,12 @@ def main():
         help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(MODEL_CLASSES.keys()),
     )
     parser.add_argument(
+        "--tokenizer_name",
+        default=None,
+        type=str,
+        help="Pretrained tokenizer name or path if not the same as model_name",
+    )
+    parser.add_argument(
         "--config_overrides",
         default=None,
         type=str,
@@ -365,7 +376,10 @@ def main():
     except KeyError:
         raise KeyError("the model {} you specified is not supported. You are welcome to add it and open a PR :)")
 
-    tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path)
+    if args.tokenizer_name:
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name)
+    else:
+        tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     # maybe we need to override configs

@@ -32,11 +32,9 @@ from transformers.activations import ACT2FN
 # from transformers.modeling_attn_mask_utils import AttentionMaskConverter, _prepare_4d_causal_attention_mask
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from transformers.modeling_utils import PreTrainedModel
-from transformers.pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
 from transformers.utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
     logging,
     replace_return_docstrings,
 )
@@ -90,43 +88,69 @@ class LlamaAttention(_LlamaAttention):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        if self.config.pretraining_tp > 1:
-            key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
-            query_slices = self.q_proj.weight.split(
-                (self.num_heads * self.head_dim) // self.config.pretraining_tp, dim=0
-            )
-            key_slices = self.k_proj.weight.split(key_value_slicing, dim=0)
-            value_slices = self.v_proj.weight.split(key_value_slicing, dim=0)
+        if encoder_outputs is None:
+            # if this is an encoder, nothing changed.
 
-            query_states = [F.linear(hidden_states, query_slices[i]) for i in range(self.config.pretraining_tp)]
-            query_states = torch.cat(query_states, dim=-1)
+            if self.config.pretraining_tp > 1:
+                key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
+                query_slices = self.q_proj.weight.split(
+                    (self.num_heads * self.head_dim) // self.config.pretraining_tp, dim=0
+                )
+                key_slices = self.k_proj.weight.split(key_value_slicing, dim=0)
+                value_slices = self.v_proj.weight.split(key_value_slicing, dim=0)
 
-            key_states = [F.linear(hidden_states, key_slices[i]) for i in range(self.config.pretraining_tp)]
-            key_states = torch.cat(key_states, dim=-1)
+                query_states = [F.linear(hidden_states, query_slices[i]) for i in range(self.config.pretraining_tp)]
+                query_states = torch.cat(query_states, dim=-1)
 
-            value_states = [F.linear(hidden_states, value_slices[i]) for i in range(self.config.pretraining_tp)]
-            value_states = torch.cat(value_states, dim=-1)
+                key_states = [F.linear(hidden_states, key_slices[i]) for i in range(self.config.pretraining_tp)]
+                key_states = torch.cat(key_states, dim=-1)
+
+                value_states = [F.linear(hidden_states, value_slices[i]) for i in range(self.config.pretraining_tp)]
+                value_states = torch.cat(value_states, dim=-1)
+
+            else:
+                query_states = self.q_proj(hidden_states)
+                key_states = self.k_proj(hidden_states)
+                value_states = self.v_proj(hidden_states)
+
+            query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+            key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+            kv_seq_len = key_states.shape[-2]
+            if past_key_value is not None:
+                kv_seq_len += past_key_value[0].shape[-2]
+            cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         else:
-            query_states = self.q_proj(hidden_states)
-            key_states = self.k_proj(hidden_states)
-            value_states = self.v_proj(hidden_states)
+            # if this is an decoder, we need to use the encoder_outputs to get the key and value states
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            if self.config.pretraining_tp > 1:
+                query_slices = self.q_proj.weight.split(
+                    (self.num_heads * self.head_dim) // self.config.pretraining_tp, dim=0
+                )
 
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value[0].shape[-2]
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+                query_states = [F.linear(hidden_states, query_slices[i]) for i in range(self.config.pretraining_tp)]
+                query_states = torch.cat(query_states, dim=-1)
+            
+            else:
+                query_states = self.q_proj(hidden_states)
+
+            query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+            key_states, value_states = encoder_outputs[1][-1]
+            # key_states, value_states = key_states.detach(), value_states.detach() # bad performance
+
+            kv_seq_len = key_states.shape[-2]
+            if past_key_value is not None:
+                kv_seq_len += past_key_value[0].shape[-2]
 
         if past_key_value is not None:
             # reuse k, v, self_attention
@@ -195,6 +219,7 @@ class LlamaDecoderLayer(_LlamaDecoderLayer):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
@@ -222,6 +247,7 @@ class LlamaDecoderLayer(_LlamaDecoderLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
+            encoder_outputs=encoder_outputs,
             output_attentions=output_attentions,
             use_cache=use_cache,
         )
@@ -349,7 +375,7 @@ class LlamaModel(_LlamaModel):
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # None for past_key_value
-                        return module(*inputs, past_key_value, output_attentions)
+                        return module(*inputs, past_key_value, encoder_outputs, output_attentions)
 
                     return custom_forward
 
@@ -365,6 +391,7 @@ class LlamaModel(_LlamaModel):
                     attention_mask=attention_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_value,
+                    encoder_outputs=encoder_outputs,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                 )
@@ -394,7 +421,16 @@ class LlamaModel(_LlamaModel):
         )
 
 
-class LlamaForCausalLMBase(_LlamaForCausalLM):
+class LlamaForCausalLM(_LlamaForCausalLM):
+    def __init__(self, config):
+        super(_LlamaForCausalLM, self).__init__(config)
+        self.model = LlamaModel(config)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+    
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -434,6 +470,63 @@ class LlamaForCausalLMBase(_LlamaForCausalLM):
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
 
+        if self.training:
+            # training
+            return self.forward_training(
+                input_ids,
+                attention_mask,
+                position_ids,
+                past_key_values,
+                inputs_embeds,
+                labels,
+                use_cache,
+                output_attentions,
+                output_hidden_states,
+                return_dict
+            )
+        elif labels is not None:
+            # inference
+            return self.forward_training(
+                input_ids,
+                attention_mask,
+                position_ids,
+                past_key_values,
+                inputs_embeds,
+                labels,
+                use_cache,
+                output_attentions,
+                output_hidden_states,
+                return_dict
+            )
+        else:
+            # prediction
+            return self.forward_predict(
+                input_ids,
+                attention_mask,
+                position_ids,
+                past_key_values,
+                inputs_embeds,
+                labels,
+                use_cache,
+                output_attentions,
+                output_hidden_states,
+                return_dict
+            )
+
+    def forward_training(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -441,6 +534,93 @@ class LlamaForCausalLMBase(_LlamaForCausalLM):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        encoder_outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=True, # we are using past_key_values to do decoding
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True, # we want to retrive the past_key_values
+        )
+
+        # # test w/ the same method as training
+        # if past_key_values is not None:
+        #     seq_len = past_key_values[-1][0].size(2)
+        #     key, value = encoder_outputs.past_key_values[-1]
+        #     key = key[..., seq_len:, :]
+        #     value = value[..., seq_len:, :]
+        #     encoder_outputs.past_key_values = ((key, value),)
+
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            encoder_outputs=encoder_outputs,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
+        if self.config.pretraining_tp > 1:
+            lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.config.pretraining_tp, dim=0)
+            logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
+            logits = torch.cat(logits, dim=-1)
+        else:
+            logits = self.lm_head(hidden_states)
+        logits = logits.float()
+
+        loss = None
+        if labels is not None:
+            # Shift so that tokens < n predict n
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            # Flatten the tokens
+            loss_fct = CrossEntropyLoss()
+            shift_logits = shift_logits.view(-1, self.config.vocab_size)
+            shift_labels = shift_labels.view(-1)
+            # Enable model parallelism
+            shift_labels = shift_labels.to(shift_logits.device)
+            loss = loss_fct(shift_logits, shift_labels)
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+    
+    def forward_predict(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -452,6 +632,12 @@ class LlamaForCausalLMBase(_LlamaForCausalLM):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+        # manually set the key value
+        if return_dict:
+            outputs.past_key_values = (outputs.past_key_values[-1], )*len(outputs.past_key_values)
+        else:
+            outputs[1] = (outputs[1][-1], )*len(outputs[1])
 
         hidden_states = outputs[0]
         if self.config.pretraining_tp > 1:
