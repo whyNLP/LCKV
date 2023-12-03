@@ -40,3 +40,10 @@ if os.environ.get('ALGPT_FUSED_ROTARY', False):
     from . import modeling_llama
     modeling_llama.apply_rotary_pos_emb = fused_apply_rotary_pos_emb
     transformers.models.llama.modeling_llama.apply_rotary_pos_emb = fused_apply_rotary_pos_emb
+
+if os.environ.get('ALGPT_FUSED_SWIGLU', False):
+    import transformers
+    from .llama_fused_swiglu import LlamaMLP
+    from . import modeling_llama
+    modeling_llama.LlamaMLP = LlamaMLP
+    transformers.models.llama.modeling_llama.LlamaMLP = LlamaMLP
