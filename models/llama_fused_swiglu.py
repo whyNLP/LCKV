@@ -11,7 +11,7 @@ class LlamaMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         assert config.hidden_act in ('silu', 'swish'), f"Fused SwiGLU requires silu / swish as activate function, but {config.hidden_act} found."
-        assert self.config.pretraining_tp == 1, "Fused SwiGLU requires pretraining_tp == 1"
+        assert config.pretraining_tp == 1, "Fused SwiGLU requires pretraining_tp == 1"
 
     def forward(self, x):
         return swiglu(
