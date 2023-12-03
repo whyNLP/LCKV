@@ -433,6 +433,8 @@ def main():
             "You are instantiating a new tokenizer from scratch. This is not supported by this script."
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
+    
+    use_flash_attention_2=os.environ.get('ALGPT_FLASH_ATTN', False)
 
     if model_args.model_name_or_path:
         torch_dtype = (
@@ -450,8 +452,11 @@ def main():
             trust_remote_code=model_args.trust_remote_code,
             torch_dtype=torch_dtype,
             low_cpu_mem_usage=model_args.low_cpu_mem_usage,
+            use_flash_attention_2=use_flash_attention_2,
         )
     else:
+        if use_flash_attention_2:
+            config._flash_attn_2_enabled = True
         model = AutoModelForCausalLM.from_config(config, trust_remote_code=model_args.trust_remote_code)
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")

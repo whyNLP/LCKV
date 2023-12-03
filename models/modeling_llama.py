@@ -78,7 +78,13 @@ class LlamaAttention(_LlamaAttention):
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if "padding_mask" in kwargs:
+            warnings.warn(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
+
         bsz, q_len, _ = hidden_states.size()
 
         if encoder_outputs is None:
@@ -264,7 +270,10 @@ class LlamaFlashAttention2(_LlamaFlashAttention2):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        dropout_rate = 0.0 if not self.training else self.attention_dropout
+        # TODO: llama does not have dropout in the config??
+        # It is recommended to use dropout with FA according to the docs
+        # when training.
+        dropout_rate = 0.0  # if not self.training else self.attn_dropout
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -309,7 +318,7 @@ class LlamaDecoderLayer(_LlamaDecoderLayer):
         self.hidden_size = config.hidden_size
         self.self_attn = (
             LlamaAttention(config=config)
-            if not getattr(config, "_flash_attn_2_enabled", False) and not use_flash_attn()
+            if not getattr(config, "_flash_attn_2_enabled", False)
             else LlamaFlashAttention2(config=config)
         )
         self.mlp = LlamaMLP(config)
@@ -325,12 +334,14 @@ class LlamaDecoderLayer(_LlamaDecoderLayer):
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
+        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            attention_mask (`torch.FloatTensor`, *optional*):
+                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
+                query_sequence_length, key_sequence_length)` if default attention is used.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -339,6 +350,10 @@ class LlamaDecoderLayer(_LlamaDecoderLayer):
                 (see `past_key_values`).
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
         """
+        if "padding_mask" in kwargs:
+            warnings.warn(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
 
         residual = hidden_states
 
@@ -353,6 +368,7 @@ class LlamaDecoderLayer(_LlamaDecoderLayer):
             encoder_outputs=encoder_outputs,
             output_attentions=output_attentions,
             use_cache=use_cache,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -380,6 +396,19 @@ class LlamaModel(_LlamaModel):
     Args:
         config: LlamaConfig
     """
+
+    def __init__(self, config: LlamaConfig):
+        super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     def forward(
