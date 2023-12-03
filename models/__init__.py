@@ -33,3 +33,10 @@ if os.environ.get('ALGPT_FUSED_CROSSENTROPY', False):
     transformers.models.llama.modeling_llama.CrossEntropyLoss = CrossEntropyLoss
     from . import modeling_llama
     modeling_llama.CrossEntropyLoss = CrossEntropyLoss
+
+if os.environ.get('ALGPT_FUSED_ROTARY', False):
+    import transformers
+    from .llama_fused_rotary import fused_apply_rotary_pos_emb
+    from . import modeling_llama
+    modeling_llama.apply_rotary_pos_emb = fused_apply_rotary_pos_emb
+    transformers.models.llama.modeling_llama.apply_rotary_pos_emb = fused_apply_rotary_pos_emb
