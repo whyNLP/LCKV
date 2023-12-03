@@ -26,3 +26,10 @@ if os.environ.get('ALGPT_FUSED_RMSNORM', False):
     transformers.models.llama.modeling_llama.LlamaRMSNorm = RMSNorm
     from . import modeling_llama
     modeling_llama.LlamaRMSNorm = RMSNorm
+
+if os.environ.get('ALGPT_FUSED_CROSSENTROPY', False):
+    import transformers
+    from flash_attn.losses.cross_entropy import CrossEntropyLoss
+    transformers.models.llama.modeling_llama.CrossEntropyLoss = CrossEntropyLoss
+    from . import modeling_llama
+    modeling_llama.CrossEntropyLoss = CrossEntropyLoss

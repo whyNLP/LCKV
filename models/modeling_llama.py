@@ -41,10 +41,6 @@ from transformers.utils import (
 from transformers.utils.import_utils import is_torch_fx_available
 from transformers.models.llama.configuration_llama import LlamaConfig
 
-from flash_attn.ops.layer_norm import DropoutAddLayerNorm
-from flash_attn.ops.rms_norm import RMSNorm, DropoutAddRMSNorm
-from flash_attn.losses.cross_entropy import CrossEntropyLoss
-
 from transformers.models.llama.modeling_llama import (
     LlamaModel as _LlamaModel,
     LlamaForCausalLM as _LlamaForCausalLM,
@@ -59,11 +55,6 @@ from transformers.models.llama.modeling_llama import (
     LLAMA_INPUTS_DOCSTRING,
     logger
 )
-
-import os
-
-def use_flash_attn():
-    return os.environ.get('ALGPT_FLASH_ATTN', False)
 
 
 class LlamaAttention(_LlamaAttention):
