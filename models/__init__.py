@@ -24,3 +24,5 @@ if os.environ.get('ALGPT_FUSED_RMSNORM', False):
     import transformers
     from flash_attn.ops.rms_norm import RMSNorm
     transformers.models.llama.modeling_llama.LlamaRMSNorm = RMSNorm
+    from . import modeling_llama
+    modeling_llama.LlamaRMSNorm = RMSNorm
