@@ -19,3 +19,8 @@ if os.environ.get('ALGPT_FLASH_ATTN', False):
     import transformers
     from .gpt2_flash_attention import forward
     transformers.models.gpt2.modeling_gpt2.GPT2Attention.forward = forward
+
+if os.environ.get('ALGPT_FUSED_RMSNORM', False):
+    import transformers
+    from flash_attn.ops.rms_norm import RMSNorm
+    transformers.models.llama.modeling_llama.LlamaRMSNorm = RMSNorm
