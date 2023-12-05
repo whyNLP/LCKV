@@ -388,6 +388,9 @@ def main():
         logger.info(f"Overriding config: {args.config_overrides}")
         config.update_from_string(args.config_overrides)
         logger.info(f"New config: {config}")
+    import os
+    if os.environ.get('ALGPT_FLASH_ATTN', False):
+        config._flash_attn_2_enabled = True
     model = model_class.from_pretrained(args.model_name_or_path, config=config)
 
     # Set the model to the right device
