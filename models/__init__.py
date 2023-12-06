@@ -36,10 +36,19 @@ if os.environ.get('ALGPT_FUSED_CROSSENTROPY', False):
 
 if os.environ.get('ALGPT_FUSED_ROTARY', False):
     import transformers
-    from .llama_fused_rotary import fused_apply_rotary_pos_emb
+    from .llama_fused_rotary import (
+        LlamaRotaryEmbedding,
+        LlamaLinearScalingRotaryEmbedding,
+        LlamaDynamicNTKScalingRotaryEmbedding,
+        fused_apply_rotary_pos_emb
+    )
+    transformers.models.llama.modeling_llama.apply_rotary_pos_emb = fused_apply_rotary_pos_emb
+    transformers.models.llama.modeling_llama.LlamaRotaryEmbedding = LlamaRotaryEmbedding
+    transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding = LlamaLinearScalingRotaryEmbedding
+    transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding = LlamaDynamicNTKScalingRotaryEmbedding
+
     from . import modeling_llama
     modeling_llama.apply_rotary_pos_emb = fused_apply_rotary_pos_emb
-    transformers.models.llama.modeling_llama.apply_rotary_pos_emb = fused_apply_rotary_pos_emb
 
 if os.environ.get('ALGPT_FUSED_SWIGLU', False):
     import transformers
