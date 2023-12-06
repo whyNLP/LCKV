@@ -39,7 +39,6 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 from transformers.utils.import_utils import is_torch_fx_available
-from transformers.models.llama.configuration_llama import LlamaConfig
 
 from transformers.models.llama.modeling_llama import (
     LlamaModel as _LlamaModel,
@@ -55,6 +54,8 @@ from transformers.models.llama.modeling_llama import (
     LLAMA_INPUTS_DOCSTRING,
     logger
 )
+
+from .configuration_llama import LlamaConfig
 
 
 class LlamaAttention(_LlamaAttention):
@@ -387,6 +388,7 @@ class LlamaModel(_LlamaModel):
     Args:
         config: LlamaConfig
     """
+    config_class = LlamaConfig
 
     def __init__(self, config: LlamaConfig):
         super().__init__(config)
@@ -525,6 +527,8 @@ class LlamaModel(_LlamaModel):
 
 
 class LlamaForCausalLM(_LlamaForCausalLM):
+    config_class = LlamaConfig
+
     def __init__(self, config):
         super(_LlamaForCausalLM, self).__init__(config)
         self.model = LlamaModel(config)
@@ -775,3 +779,5 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+BestLlamaForCausalLM = LlamaForCausalLM

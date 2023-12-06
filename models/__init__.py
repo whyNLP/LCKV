@@ -1,6 +1,6 @@
 from .configuration_gpt2 import GPT2Config, ALGPT2Config, CycleGPT2Config
 from .modeling_gpt2 import GPT2LMHeadModel, ALGPT2LMHeadModel, CycleGPT2LMHeadModel
-from transformers.models.llama.configuration_llama import LlamaConfig
+from .configuration_llama import LlamaConfig
 from .modeling_llama import LlamaForCausalLM
 from .wandb_callback import WandbCallback
 
@@ -11,8 +11,8 @@ CONFIG_MAPPING.register("algpt2", ALGPT2Config)
 MODEL_FOR_CAUSAL_LM_MAPPING.register(ALGPT2Config, ALGPT2LMHeadModel)
 CONFIG_MAPPING.register("cyclegpt2", CycleGPT2Config)
 MODEL_FOR_CAUSAL_LM_MAPPING.register(CycleGPT2Config, CycleGPT2LMHeadModel)
-
-MODEL_FOR_CAUSAL_LM_MAPPING.register(LlamaConfig, LlamaForCausalLM, exist_ok = True)
+CONFIG_MAPPING.register("best-llama", LlamaConfig)
+MODEL_FOR_CAUSAL_LM_MAPPING.register(LlamaConfig, LlamaForCausalLM)
 
 import os
 if os.environ.get('ALGPT_FLASH_ATTN', False):
