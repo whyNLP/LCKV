@@ -329,6 +329,7 @@ def main():
             cache_dir=model_args.cache_dir,
             token=model_args.token,
             streaming=data_args.streaming,
+            download_config=datasets.DownloadConfig(resume_download=True,max_retries=10000)
         )
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(

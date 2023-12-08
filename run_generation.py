@@ -70,7 +70,7 @@ MAX_LENGTH = int(10000)  # Hardcoded max length to avoid infinite loop
 
 MODEL_CLASSES = {
     "origin-gpt2": (_GPT2LMHeadModel, GPT2Tokenizer),
-    "origin-llama": (_LlamaForCausalLM, LlamaTokenizer),
+    "best-llama": (LlamaForCausalLM, LlamaTokenizer),
     "algpt2": (ALGPT2LMHeadModel, GPT2Tokenizer),
     "cyclegpt2": (CycleGPT2LMHeadModel, GPT2Tokenizer),
     "gpt2": (GPT2LMHeadModel, GPT2Tokenizer),
@@ -81,7 +81,7 @@ MODEL_CLASSES = {
     "xlm": (XLMWithLMHeadModel, XLMTokenizer),
     "gptj": (GPTJForCausalLM, AutoTokenizer),
     "bloom": (BloomForCausalLM, BloomTokenizerFast),
-    "llama": (LlamaForCausalLM, LlamaTokenizer),
+    "llama": (_LlamaForCausalLM, LlamaTokenizer),
     "opt": (OPTForCausalLM, GPT2Tokenizer),
 }
 
