@@ -653,13 +653,9 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             return_dict=True, # we want to retrive the past_key_values
         )
 
-        # # test w/ the same method as training
-        # if past_key_values is not None:
-        #     seq_len = past_key_values[-1][0].size(2)
-        #     key, value = encoder_outputs.past_key_values[-1]
-        #     key = key[..., seq_len:, :]
-        #     value = value[..., seq_len:, :]
-        #     encoder_outputs.past_key_values = ((key, value),)
+        old_kv = encoder_outputs.past_key_values
+        if past_key_values is not None:
+            past_key_values = None
 
         outputs = self.model(
             input_ids=input_ids,
@@ -673,6 +669,11 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+        if return_dict:
+            outputs.past_key_values = old_kv
+        elif old_kv is not None:
+            outputs = tuple(outputs[0], old_kv, *outputs[2:])
 
         hidden_states = outputs[0]
         if self.config.pretraining_tp > 1:
