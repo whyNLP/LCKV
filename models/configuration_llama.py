@@ -29,15 +29,11 @@ class BestLlamaConfig(_LlamaConfig):
         self,
         kv_pattern: str = "use_kv",
         train_encoder: bool = True,
+        num_warmup_layers: int = 0,
         **kwargs,
     ):
         """
         Args:
-            use_sweet (`bool`, *optional*, defaults to False):
-                Use mutli-model strategy introduced in *Finding the SWEET Spot: Analysis
-                and Improvement of Adaptive Inference in Low Resource Settings* 
-                (https://aclanthology.org/2023.acl-long.829). The gredient in later blocks
-                will not affect former blocks.
             kv_pattern (`str`, *optional*, defaults to "use_kv"):
                 The pattern to use key-value during inference. The value should be one of 
                 "use_kv", "proj_kv", "use_hidden".
@@ -48,9 +44,17 @@ class BestLlamaConfig(_LlamaConfig):
                     original kv.
                 - "use_hidden": use the hidden vector in the last layer to recompute the
                     key-value pair in each transformer blocks.
+            train_encoder (`bool`, *optional*, defaults to True):
+                Whether to train the encoder. If set to False, the encoder will be detached
+                from the computation graph when calculating the gradients.
+            num_warmup_layers (`int`, *optional*, defaults to 0):
+                The number of transformer blocks that will use the key-value pair in the
+                original layers as the kv cache. The rest of the transformer blocks will
+                use the key-value pair in the last layer as the kv cache.
         """
         super().__init__(**kwargs)
         self.kv_pattern = kv_pattern
         self.train_encoder = train_encoder
+        self.num_warmup_layers = num_warmup_layers
 
 LlamaConfig = BestLlamaConfig

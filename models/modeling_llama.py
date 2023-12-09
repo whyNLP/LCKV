@@ -478,6 +478,7 @@ class LlamaModel(_LlamaModel):
                 all_hidden_states += (hidden_states,)
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
+            layer_encoder_outputs = encoder_outputs if idx >= self.config.num_warmup_layers else None
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
@@ -486,7 +487,7 @@ class LlamaModel(_LlamaModel):
                     attention_mask,
                     position_ids,
                     past_key_value,
-                    encoder_outputs,
+                    layer_encoder_outputs,
                     output_attentions,
                     use_cache,
                 )
@@ -496,7 +497,7 @@ class LlamaModel(_LlamaModel):
                     attention_mask=attention_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_value,
-                    encoder_outputs=encoder_outputs,
+                    encoder_outputs=layer_encoder_outputs,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                 )
@@ -670,10 +671,11 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             return_dict=return_dict,
         )
 
-        if return_dict:
-            outputs.past_key_values = old_kv
-        elif old_kv is not None:
-            outputs = tuple(outputs[0], old_kv, *outputs[2:])
+        if use_cache:
+            if return_dict:
+                outputs.past_key_values = old_kv
+            elif old_kv is not None:
+                outputs = tuple(outputs[0], old_kv, *outputs[2:])
 
         hidden_states = outputs[0]
         if self.config.pretraining_tp > 1:
@@ -742,10 +744,14 @@ class LlamaForCausalLM(_LlamaForCausalLM):
         )
 
         # manually set the key value
-        if return_dict:
-            outputs.past_key_values = (outputs.past_key_values[-1], )*len(outputs.past_key_values)
-        else:
-            outputs[1] = (outputs[1][-1], )*len(outputs[1])
+        if use_cache:
+            new_past_key_values = outputs[1]
+            new_past_key_values = new_past_key_values[:self.config.num_warmup_layers] + \
+                (new_past_key_values[-1],)*(len(new_past_key_values) - self.config.num_warmup_layers)
+            if return_dict:
+                outputs.past_key_values = new_past_key_values
+            else:
+                outputs = tuple(outputs[0], new_past_key_values, *outputs[2:])
 
         hidden_states = outputs[0]
         if self.config.pretraining_tp > 1:
