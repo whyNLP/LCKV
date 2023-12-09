@@ -329,7 +329,7 @@ class LlamaAttention(LlamaAttentionBase):
         use_cache: bool = False,
         **kwargs,
     ):
-        if encoder_outputs is not None:
+        if encoder_outputs is not True and encoder_outputs is not None:
             output = self._inner_forward_encoder(
                 hidden_states,
                 position_ids,
@@ -343,7 +343,7 @@ class LlamaAttention(LlamaAttentionBase):
                 hidden_states,
                 position_ids,
                 past_key_value,
-                encoder_outputs,
+                None,
                 use_cache,
                 **kwargs
             )
@@ -362,7 +362,7 @@ class LlamaAttention(LlamaAttentionBase):
             hidden_states,
             position_ids,
             past_key_value,
-            encoder_outputs,
+            None,
             use_cache,
             **kwargs
         )
@@ -377,6 +377,7 @@ class LlamaAttention(LlamaAttentionBase):
         **kwargs,
     ):
         """It will deal with encoder_outputs differently from its parent."""
+        assert past_key_value is None
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -385,15 +386,8 @@ class LlamaAttention(LlamaAttentionBase):
         key_states, value_states = encoder_outputs
 
         kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value[0].shape[-2]
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states = apply_rotary_pos_emb_q(query_states, cos, sin, position_ids)
-
-        if past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
         past_key_value = (key_states, value_states) if use_cache else None
 
@@ -410,7 +404,7 @@ class LlamaFlashAttention2(LlamaFlashAttention2Base):
         use_cache: bool = False,
         **kwargs,
     ):
-        if encoder_outputs is not None:
+        if encoder_outputs is not True and encoder_outputs is not None:
             output = self._inner_forward_encoder(
                 hidden_states,
                 position_ids,
@@ -424,7 +418,7 @@ class LlamaFlashAttention2(LlamaFlashAttention2Base):
                 hidden_states,
                 position_ids,
                 past_key_value,
-                encoder_outputs,
+                None,
                 use_cache,
                 **kwargs
             )
@@ -443,7 +437,7 @@ class LlamaFlashAttention2(LlamaFlashAttention2Base):
             hidden_states,
             position_ids,
             past_key_value,
-            encoder_outputs,
+            None,
             use_cache,
             **kwargs
         )
@@ -458,6 +452,7 @@ class LlamaFlashAttention2(LlamaFlashAttention2Base):
         **kwargs,
     ):
         """It will deal with encoder_outputs differently from its parent."""
+        assert past_key_value is None
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -466,17 +461,288 @@ class LlamaFlashAttention2(LlamaFlashAttention2Base):
         key_states, value_states = encoder_outputs
 
         kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value[0].shape[-2]
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states = apply_rotary_pos_emb_q(query_states, cos, sin, position_ids)
 
-        if past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        past_key_value = (key_states, value_states) if use_cache else None
+
+        return query_states, key_states, value_states, kv_seq_len, past_key_value
+
+
+class LlamaAttentionProj(LlamaAttention):
+    def __init__(self, config: LlamaConfig):
+        super().__init__(config)
+
+        self._last_k_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.num_key_value_heads * self.head_dim)
+        self._last_v_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.num_key_value_heads * self.head_dim)
+
+        self.last_k_proj = lambda x: x + self._last_k_proj(x)
+        self.last_v_proj = lambda x: x + self._last_v_proj(x)
+
+    def _inner_forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        use_cache: bool = False,
+        **kwargs,
+    ):
+        if encoder_outputs == True and past_key_value is not None:
+            output = self._inner_forward_kv_proj(
+                hidden_states,
+                position_ids,
+                past_key_value,
+                None,
+                use_cache,
+                **kwargs
+            )
+        elif encoder_outputs is not None:
+            output = self._inner_forward_encoder(
+                hidden_states,
+                position_ids,
+                None,
+                encoder_outputs,
+                use_cache,
+                **kwargs
+            )
+        else:
+            output = self._inner_forward_kv(
+                hidden_states,
+                position_ids,
+                past_key_value,
+                None,
+                use_cache,
+                **kwargs
+            )
+        return output
+    
+    def _inner_forward_encoder(
+        self,
+        hidden_states: torch.Tensor,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        use_cache: bool = False,
+        **kwargs,
+    ):
+        """It will deal with encoder_outputs differently from its parent."""
+        assert past_key_value is None
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        key_states, value_states = encoder_outputs
+
+        kv_seq_len = key_states.shape[-2]
+        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        query_states = apply_rotary_pos_emb_q(query_states, cos, sin, position_ids)
 
         past_key_value = (key_states, value_states) if use_cache else None
+
+        key_states = key_states.transpose(1, 2).reshape(bsz, kv_seq_len, self.num_key_value_heads* self.head_dim)
+        value_states = value_states.transpose(1, 2).reshape(bsz, kv_seq_len, self.num_key_value_heads* self.head_dim)
+        key_states = self.last_k_proj(key_states).reshape(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = self.last_v_proj(value_states).reshape(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        return query_states, key_states, value_states, kv_seq_len, past_key_value
+    
+    def _inner_forward_kv_proj(
+        self,
+        hidden_states: torch.Tensor,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        use_cache: bool = False,
+        **kwargs,
+    ):
+        assert encoder_outputs is None
+        assert past_key_value is not None
+        bsz, q_len, _ = hidden_states.size()
+
+        if self.config.pretraining_tp > 1:
+            key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
+            query_slices = self.q_proj.weight.split(
+                (self.num_heads * self.head_dim) // self.config.pretraining_tp, dim=0
+            )
+            key_slices = self.k_proj.weight.split(key_value_slicing, dim=0)
+            value_slices = self.v_proj.weight.split(key_value_slicing, dim=0)
+
+            query_states = [F.linear(hidden_states, query_slices[i]) for i in range(self.config.pretraining_tp)]
+            query_states = torch.cat(query_states, dim=-1)
+
+            key_states = [F.linear(hidden_states, key_slices[i]) for i in range(self.config.pretraining_tp)]
+            key_states = torch.cat(key_states, dim=-1)
+
+            value_states = [F.linear(hidden_states, value_slices[i]) for i in range(self.config.pretraining_tp)]
+            value_states = torch.cat(value_states, dim=-1)
+
+        else:
+            query_states = self.q_proj(hidden_states)
+            key_states = self.k_proj(hidden_states)
+            value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        kv_seq_len = key_states.shape[-2]
+        kv_seq_len += past_key_value[0].shape[-2]
+        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
+        new_key_states = torch.cat([past_key_value[0], key_states], dim=2)
+        new_value_states = torch.cat([past_key_value[1], value_states], dim=2)
+
+        past_key_value = (new_key_states, new_value_states) if use_cache else None
+
+        past_key_states = past_key_value[0].transpose(1, 2).reshape(bsz, past_key_value[0].shape[-2], self.num_key_value_heads* self.head_dim)
+        past_value_states = past_key_value[1].transpose(1, 2).reshape(bsz, past_key_value[0].shape[-2], self.num_key_value_heads* self.head_dim)
+        past_key_states = self.last_k_proj(past_key_states).reshape(bsz, past_key_value[0].shape[-2], self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        past_value_states = self.last_v_proj(past_value_states).reshape(bsz, past_key_value[0].shape[-2], self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        key_states = torch.cat([past_key_states, key_states], dim=2)
+        value_states = torch.cat([past_value_states, value_states], dim=2)
+
+        return query_states, key_states, value_states, kv_seq_len, past_key_value
+
+
+class LlamaFlashAttention2Proj(LlamaFlashAttention2):
+    def __init__(self, config: LlamaConfig):
+        super().__init__(config)
+
+        self._last_k_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.num_key_value_heads * self.head_dim)
+        self._last_v_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.num_key_value_heads * self.head_dim)
+
+        self.last_k_proj = lambda x: x + self._last_k_proj(x)
+        self.last_v_proj = lambda x: x + self._last_v_proj(x)
+
+    def _inner_forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        use_cache: bool = False,
+        **kwargs,
+    ):
+        if encoder_outputs == True and past_key_value is not None:
+            output = self._inner_forward_kv_proj(
+                hidden_states,
+                position_ids,
+                past_key_value,
+                None,
+                use_cache,
+                **kwargs
+            )
+        elif encoder_outputs is not None:
+            output = self._inner_forward_encoder(
+                hidden_states,
+                position_ids,
+                None,
+                encoder_outputs,
+                use_cache,
+                **kwargs
+            )
+        else:
+            output = self._inner_forward_kv(
+                hidden_states,
+                position_ids,
+                past_key_value,
+                None,
+                use_cache,
+                **kwargs
+            )
+        return output
+    
+    def _inner_forward_encoder(
+        self,
+        hidden_states: torch.Tensor,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        use_cache: bool = False,
+        **kwargs,
+    ):
+        """It will deal with encoder_outputs differently from its parent."""
+        assert past_key_value is None
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        key_states, value_states = encoder_outputs
+
+        kv_seq_len = key_states.shape[-2]
+        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        query_states = apply_rotary_pos_emb_q(query_states, cos, sin, position_ids)
+
+        past_key_value = (key_states, value_states) if use_cache else None
+
+        key_states = key_states.transpose(1, 2).reshape(bsz, kv_seq_len, self.num_key_value_heads* self.head_dim)
+        value_states = value_states.transpose(1, 2).reshape(bsz, kv_seq_len, self.num_key_value_heads* self.head_dim)
+        key_states = self.last_k_proj(key_states).reshape(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = self.last_v_proj(value_states).reshape(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        return query_states, key_states, value_states, kv_seq_len, past_key_value
+    
+    def _inner_forward_kv_proj(
+        self,
+        hidden_states: torch.Tensor,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        use_cache: bool = False,
+        **kwargs,
+    ):
+        assert encoder_outputs is None
+        assert past_key_value is not None
+        bsz, q_len, _ = hidden_states.size()
+
+        if self.config.pretraining_tp > 1:
+            key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
+            query_slices = self.q_proj.weight.split(
+                (self.num_heads * self.head_dim) // self.config.pretraining_tp, dim=0
+            )
+            key_slices = self.k_proj.weight.split(key_value_slicing, dim=0)
+            value_slices = self.v_proj.weight.split(key_value_slicing, dim=0)
+
+            query_states = [F.linear(hidden_states, query_slices[i]) for i in range(self.config.pretraining_tp)]
+            query_states = torch.cat(query_states, dim=-1)
+
+            key_states = [F.linear(hidden_states, key_slices[i]) for i in range(self.config.pretraining_tp)]
+            key_states = torch.cat(key_states, dim=-1)
+
+            value_states = [F.linear(hidden_states, value_slices[i]) for i in range(self.config.pretraining_tp)]
+            value_states = torch.cat(value_states, dim=-1)
+
+        else:
+            query_states = self.q_proj(hidden_states)
+            key_states = self.k_proj(hidden_states)
+            value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        kv_seq_len = key_states.shape[-2]
+        kv_seq_len += past_key_value[0].shape[-2]
+        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
+        new_key_states = torch.cat([past_key_value[0], key_states], dim=2)
+        new_value_states = torch.cat([past_key_value[1], value_states], dim=2)
+
+        past_key_value = (new_key_states, new_value_states) if use_cache else None
+
+        past_key_states = past_key_value[0].transpose(1, 2).reshape(bsz, past_key_value[0].shape[-2], self.num_key_value_heads* self.head_dim)
+        past_value_states = past_key_value[1].transpose(1, 2).reshape(bsz, past_key_value[0].shape[-2], self.num_key_value_heads* self.head_dim)
+        past_key_states = self.last_k_proj(past_key_states).reshape(bsz, past_key_value[0].shape[-2], self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        past_value_states = self.last_v_proj(past_value_states).reshape(bsz, past_key_value[0].shape[-2], self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        key_states = torch.cat([past_key_states, key_states], dim=2)
+        value_states = torch.cat([past_value_states, value_states], dim=2)
 
         return query_states, key_states, value_states, kv_seq_len, past_key_value
 
@@ -495,13 +761,17 @@ class LlamaDecoderLayer(_LlamaDecoderLayer):
         if not getattr(config, "_flash_attn_2_enabled", False):
             if layer_idx < config.num_warmup_layers:
                 return LlamaAttentionBase
-            else:
+            elif config.kv_pattern == 'use_kv':
                 return LlamaAttention
+            elif config.kv_pattern == 'proj_kv':
+                return LlamaAttentionProj
         else:
             if layer_idx < config.num_warmup_layers:
                 return LlamaFlashAttention2Base
             elif config.kv_pattern == 'use_kv':
                 return LlamaFlashAttention2
+            elif config.kv_pattern == 'proj_kv':
+                return LlamaFlashAttention2Proj
 
     def forward(
         self,
@@ -793,7 +1063,7 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             )
         else:
             # prediction
-            return self.forward_training(
+            return self.forward_predict(
                 input_ids,
                 attention_mask,
                 position_ids,
@@ -925,6 +1195,7 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
+            encoder_outputs=True,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
