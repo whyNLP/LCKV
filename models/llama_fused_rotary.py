@@ -63,3 +63,9 @@ def fused_apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     q_embed = apply_rotary_emb(q.transpose(1, 2), cos, sin).transpose(1, 2)
     k_embed = apply_rotary_emb(k.transpose(1, 2), cos, sin).transpose(1, 2)
     return q_embed, k_embed
+
+def fused_apply_rotary_pos_emb_q(q, cos, sin, position_ids, unsqueeze_dim=1):
+    cos = cos[position_ids]
+    sin = sin[position_ids]
+    q_embed = apply_rotary_emb(q.transpose(1, 2), cos, sin).transpose(1, 2)
+    return q_embed

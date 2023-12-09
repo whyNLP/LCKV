@@ -40,7 +40,8 @@ if os.environ.get('ALGPT_FUSED_ROTARY', False):
         LlamaRotaryEmbedding,
         LlamaLinearScalingRotaryEmbedding,
         LlamaDynamicNTKScalingRotaryEmbedding,
-        fused_apply_rotary_pos_emb
+        fused_apply_rotary_pos_emb,
+        fused_apply_rotary_pos_emb_q
     )
     transformers.models.llama.modeling_llama.apply_rotary_pos_emb = fused_apply_rotary_pos_emb
     transformers.models.llama.modeling_llama.LlamaRotaryEmbedding = LlamaRotaryEmbedding
@@ -49,6 +50,7 @@ if os.environ.get('ALGPT_FUSED_ROTARY', False):
 
     from . import modeling_llama
     modeling_llama.apply_rotary_pos_emb = fused_apply_rotary_pos_emb
+    modeling_llama.apply_rotary_pos_emb_q = fused_apply_rotary_pos_emb_q
 
 if os.environ.get('ALGPT_FUSED_SWIGLU', False):
     import transformers
