@@ -55,7 +55,9 @@ from models import (
     GPT2LMHeadModel,
     ALGPT2LMHeadModel,
     CycleGPT2LMHeadModel,
-    LlamaForCausalLM
+    LlamaForCausalLM,
+    ALLlamaForCausalLM,
+    CycleLlamaForCausalLM,
 )
 
 
@@ -71,6 +73,8 @@ MAX_LENGTH = int(10000)  # Hardcoded max length to avoid infinite loop
 MODEL_CLASSES = {
     "origin-gpt2": (_GPT2LMHeadModel, GPT2Tokenizer),
     "best-llama": (LlamaForCausalLM, LlamaTokenizer),
+    "alllama": (ALLlamaForCausalLM, LlamaTokenizer),
+    "cyclellama": (CycleLlamaForCausalLM, LlamaTokenizer),
     "algpt2": (ALGPT2LMHeadModel, GPT2Tokenizer),
     "cyclegpt2": (CycleGPT2LMHeadModel, GPT2Tokenizer),
     "gpt2": (GPT2LMHeadModel, GPT2Tokenizer),
