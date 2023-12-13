@@ -1,7 +1,9 @@
 from .configuration_gpt2 import GPT2Config, ALGPT2Config, CycleGPT2Config
 from .modeling_gpt2 import GPT2LMHeadModel, ALGPT2LMHeadModel, CycleGPT2LMHeadModel
-from .configuration_llama import LlamaConfig
+from .configuration_llama import BestLlamaConfig
 from .modeling_llama import LlamaForCausalLM
+from .configuration_llama import ALLlamaConfig, CycleLlamaConfig
+from .modeling_alllama import ALLlamaForCausalLM, CycleLlamaForCausalLM
 from .wandb_callback import WandbCallback
 
 from transformers import CONFIG_MAPPING, MODEL_FOR_CAUSAL_LM_MAPPING
@@ -11,8 +13,14 @@ CONFIG_MAPPING.register("algpt2", ALGPT2Config)
 MODEL_FOR_CAUSAL_LM_MAPPING.register(ALGPT2Config, ALGPT2LMHeadModel)
 CONFIG_MAPPING.register("cyclegpt2", CycleGPT2Config)
 MODEL_FOR_CAUSAL_LM_MAPPING.register(CycleGPT2Config, CycleGPT2LMHeadModel)
-CONFIG_MAPPING.register("best-llama", LlamaConfig)
-MODEL_FOR_CAUSAL_LM_MAPPING.register(LlamaConfig, LlamaForCausalLM)
+CONFIG_MAPPING.register("best-llama", BestLlamaConfig)
+MODEL_FOR_CAUSAL_LM_MAPPING.register(BestLlamaConfig, LlamaForCausalLM)
+
+from transformers import AutoConfig, AutoModelForCausalLM
+AutoConfig.register("alllama", ALLlamaConfig)
+AutoModelForCausalLM.register(ALLlamaConfig, ALLlamaForCausalLM)
+AutoConfig.register("cyclellama", CycleLlamaConfig)
+AutoModelForCausalLM.register(CycleLlamaConfig, CycleLlamaForCausalLM)
 
 import os
 if os.environ.get('ALGPT_FLASH_ATTN', False):
@@ -26,6 +34,8 @@ if os.environ.get('ALGPT_FUSED_RMSNORM', False):
     transformers.models.llama.modeling_llama.LlamaRMSNorm = RMSNorm
     from . import modeling_llama
     modeling_llama.LlamaRMSNorm = RMSNorm
+    from . import modeling_alllama
+    modeling_alllama.LlamaRMSNorm = RMSNorm
 
 if os.environ.get('ALGPT_FUSED_CROSSENTROPY', False):
     import transformers
@@ -33,6 +43,8 @@ if os.environ.get('ALGPT_FUSED_CROSSENTROPY', False):
     transformers.models.llama.modeling_llama.CrossEntropyLoss = CrossEntropyLoss
     from . import modeling_llama
     modeling_llama.CrossEntropyLoss = CrossEntropyLoss
+    from . import modeling_alllama
+    modeling_alllama.CrossEntropyLoss = CrossEntropyLoss
 
 if os.environ.get('ALGPT_FUSED_ROTARY', False):
     import transformers

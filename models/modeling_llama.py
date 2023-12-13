@@ -56,7 +56,7 @@ from transformers.models.llama.modeling_llama import (
     logger
 )
 
-from .configuration_llama import LlamaConfig
+from .configuration_llama import BestLlamaConfig
 
 def apply_rotary_pos_emb_q(q, cos, sin, position_ids, unsqueeze_dim=1):
     cos = cos[position_ids].unsqueeze(unsqueeze_dim)
@@ -470,7 +470,7 @@ class LlamaFlashAttention2(LlamaFlashAttention2Base):
 
 
 class LlamaAttentionProj(LlamaAttention):
-    def __init__(self, config: LlamaConfig):
+    def __init__(self, config: BestLlamaConfig):
         super().__init__(config)
 
         self._last_k_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.num_key_value_heads * self.head_dim)
@@ -609,7 +609,7 @@ class LlamaAttentionProj(LlamaAttention):
 
 
 class LlamaFlashAttention2Proj(LlamaFlashAttention2):
-    def __init__(self, config: LlamaConfig):
+    def __init__(self, config: BestLlamaConfig):
         super().__init__(config)
 
         self._last_k_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.num_key_value_heads * self.head_dim)
@@ -1019,7 +1019,7 @@ class LlamaFlashAttention2Hidden(LlamaFlashAttention2):
         return query_states, key_states, value_states, kv_seq_len, past_key_value
 
 class LlamaDecoderLayer(_LlamaDecoderLayer):
-    def __init__(self, config: LlamaConfig, layer_idx: int):
+    def __init__(self, config: BestLlamaConfig, layer_idx: int):
         super(_LlamaDecoderLayer, self).__init__()
         self.hidden_size = config.hidden_size
         attn_cls = self._get_attn_cls(config, layer_idx)
@@ -1028,7 +1028,7 @@ class LlamaDecoderLayer(_LlamaDecoderLayer):
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
     
-    def _get_attn_cls(self, config: LlamaConfig, layer_idx: int):
+    def _get_attn_cls(self, config: BestLlamaConfig, layer_idx: int):
         if not getattr(config, "_flash_attn_2_enabled", False):
             if layer_idx < config.num_warmup_layers:
                 return LlamaAttentionBase
@@ -1117,11 +1117,11 @@ class LlamaModel(_LlamaModel):
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
 
     Args:
-        config: LlamaConfig
+        config: BestLlamaConfig
     """
-    config_class = LlamaConfig
+    config_class = BestLlamaConfig
 
-    def __init__(self, config: LlamaConfig):
+    def __init__(self, config: BestLlamaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -1258,7 +1258,7 @@ class LlamaModel(_LlamaModel):
 
 
 class LlamaForCausalLM(_LlamaForCausalLM):
-    config_class = LlamaConfig
+    config_class = BestLlamaConfig
 
     def __init__(self, config):
         super(_LlamaForCausalLM, self).__init__(config)
