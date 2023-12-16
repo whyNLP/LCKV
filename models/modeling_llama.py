@@ -1460,6 +1460,76 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             attentions=outputs.attentions,
         )
     
+    def forward_inference(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        """This is extremely slow, only use it for the final testing."""
+        
+        seq_len = input_ids.shape[1]
+        logits = []
+        
+        for i in range(seq_len):
+            m_input_ids = input_ids[:, i:i+1]
+            if len(attention_mask.shape) == 4:
+                m_attention_mask = attention_mask[:, :, i:i+1, :i+1]
+            else:
+                m_attention_mask = attention_mask[:, i:i+1]
+            m_position_ids = position_ids[:, i:i+1] if position_ids is not None else None
+            m_inputs_embeds = inputs_embeds[:, i:i+1] if inputs_embeds is not None else None
+            
+            outputs = self.forward_predict(
+                input_ids=m_input_ids,
+                attention_mask=m_attention_mask,
+                position_ids=m_position_ids,
+                past_key_values=past_key_values,
+                inputs_embeds=m_inputs_embeds,
+                labels=None,
+                use_cache=True,
+                output_attentions=False,
+                output_hidden_states=False,
+                return_dict=True,
+            )
+
+            logits.append(outputs.logits)
+            past_key_values = outputs.past_key_values
+
+        logits = torch.cat(logits, dim=1)
+        loss = None
+        if labels is not None:
+            # Shift so that tokens < n predict n
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            # Flatten the tokens
+            loss_fct = CrossEntropyLoss()
+            shift_logits = shift_logits.view(-1, self.config.vocab_size)
+            shift_labels = shift_labels.view(-1)
+            # Enable model parallelism
+            shift_labels = shift_labels.to(shift_logits.device)
+            loss = loss_fct(shift_logits, shift_labels)
+        
+        if not return_dict:
+            output = (logits,)
+            return (loss,) + output if loss is not None else output
+        
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=past_key_values,
+            hidden_states=None,
+            attentions=None,
+        )
+            
+    
     def forward_predict(
         self,
         input_ids: torch.LongTensor = None,
