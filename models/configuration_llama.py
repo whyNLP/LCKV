@@ -29,6 +29,7 @@ class BestLlamaConfig(_LlamaConfig):
         self,
         kv_pattern: str = "use_kv",
         train_encoder: bool = True,
+        num_encoders: int = 1,
         num_warmup_layers: int = 0,
         **kwargs,
     ):
@@ -47,6 +48,9 @@ class BestLlamaConfig(_LlamaConfig):
             train_encoder (`bool`, *optional*, defaults to True):
                 Whether to train the encoder. If set to False, the encoder will be detached
                 from the computation graph when calculating the gradients.
+            num_encoders (`int`, *optional*, defaults to 1):
+                The number of encoders. x encoders will ensure the starting x tokens in
+                prediction is consistent with training.
             num_warmup_layers (`int`, *optional*, defaults to 0):
                 The number of transformer blocks that will use the key-value pair in the
                 original layers as the kv cache. The rest of the transformer blocks will
@@ -55,6 +59,7 @@ class BestLlamaConfig(_LlamaConfig):
         super().__init__(**kwargs)
         self.kv_pattern = kv_pattern
         self.train_encoder = train_encoder
+        self.num_encoders = num_encoders
         self.num_warmup_layers = num_warmup_layers
 
 

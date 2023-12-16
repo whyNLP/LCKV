@@ -64,6 +64,14 @@ def apply_rotary_pos_emb_q(q, cos, sin, position_ids, unsqueeze_dim=1):
     q_embed = (q * cos) + (rotate_half(q) * sin)
     return q_embed
 
+class DummyContext:
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+dummy_context = DummyContext()
 
 class LlamaAttentionBase(_LlamaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper
@@ -1377,35 +1385,38 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             else:
                 past_key_values, past_hiddens = None, None
 
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        encoder_outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=True, # we are using past_key_values to do decoding
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True, # we want to retrive the past_key_values
-        )
+        old_kv = None
+        encoder_outputs = None
+        for i in range(self.config.num_encoders):
+            
+            context = dummy_context if self.config.train_encoder else torch.no_grad()
 
-        old_kv = encoder_outputs.past_key_values
-        
-        if self.config.kv_pattern == 'use_hidden':
-            encoder_outputs = encoder_outputs[0]
-            if not self.config.train_encoder:
-                encoder_outputs = encoder_outputs.detach()
-            if past_hiddens is not None:
-                encoder_outputs = torch.cat([past_hiddens, encoder_outputs], dim=1)
-            past_hiddens = encoder_outputs
-            old_kv = (*old_kv, past_hiddens)
-        else:
-            encoder_outputs = encoder_outputs.past_key_values[-1]
-            if not self.config.train_encoder:
-                key, value = encoder_outputs
-                key, value = key.detach(), value.detach()
-                encoder_outputs = (key, value)
+            with context:
+                # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+                encoder_outputs = self.model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    past_key_values=past_key_values,
+                    encoder_outputs=encoder_outputs,
+                    inputs_embeds=inputs_embeds,
+                    use_cache=True, # we are using past_key_values to do decoding
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=True, # we want to retrive the past_key_values
+                )
+
+            if old_kv is None:
+                old_kv = encoder_outputs.past_key_values
+                tmp_kv = old_kv
+            
+            if self.config.kv_pattern == 'use_hidden':
+                encoder_outputs = encoder_outputs[0]
+                if past_hiddens is not None:
+                    encoder_outputs = torch.cat([past_hiddens, encoder_outputs], dim=1)
+                old_kv = (*tmp_kv, encoder_outputs)
+            else:
+                encoder_outputs = encoder_outputs.past_key_values[-1]
 
         outputs = self.model(
             input_ids=input_ids,
@@ -1419,6 +1430,9 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+        if old_kv is None:
+            old_kv = outputs.past_key_values
 
         if use_cache:
             if return_dict:
