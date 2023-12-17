@@ -29,6 +29,7 @@ class BestLlamaConfig(_LlamaConfig):
         self,
         kv_pattern: str = "use_kv",
         train_encoder: bool = True,
+        mask_diagonal: bool = False,
         num_encoders: int = 1,
         num_warmup_layers: int = 0,
         **kwargs,
@@ -48,6 +49,10 @@ class BestLlamaConfig(_LlamaConfig):
             train_encoder (`bool`, *optional*, defaults to True):
                 Whether to train the encoder. If set to False, the encoder will be detached
                 from the computation graph when calculating the gradients.
+            mask_diagonal (`bool`, *optional*, defaults to False):
+                Whether to mask the diagonal of the attention matrix. This is useful when
+                the model is used for sequence generation. The training and inference
+                should be consistent.
             num_encoders (`int`, *optional*, defaults to 1):
                 The number of encoders. x encoders will ensure the starting x tokens in
                 prediction is consistent with training.
@@ -59,6 +64,7 @@ class BestLlamaConfig(_LlamaConfig):
         super().__init__(**kwargs)
         self.kv_pattern = kv_pattern
         self.train_encoder = train_encoder
+        self.mask_diagonal = mask_diagonal
         self.num_encoders = num_encoders
         self.num_warmup_layers = num_warmup_layers
 

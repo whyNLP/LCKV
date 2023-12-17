@@ -20,6 +20,7 @@
 """ PyTorch LLaMA model."""
 import math
 import warnings
+from tqdm import trange
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -174,6 +175,12 @@ class LlamaAttentionBase(_LlamaAttention):
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
             attn_weights = attn_weights + attention_mask
+        
+        if self.config.mask_diagonal:
+            _min_weight = torch.finfo(attn_weights.dtype).min / 100 # if all tokens are masked, this one will be used
+            mask = torch.full_like(attn_weights, _min_weight)
+            mask = mask.tril(diagonal=kv_seq_len - q_len).triu(diagonal=kv_seq_len - q_len)
+            attn_weights = attn_weights + mask
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
@@ -313,10 +320,34 @@ class LlamaFlashAttention2Base(_LlamaFlashAttention2):
             query_states = query_states.to(target_dtype)
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
+        
+        if self.config.mask_diagonal:
+            _q_len = q_len
+            if q_len == 1 and kv_seq_len == 1:
+                pass
+            elif q_len == kv_seq_len:
+                query_states = query_states[:, 1:, :, :]
+                key_states = key_states[:, :-1, :, :]
+                value_states = value_states[:, :-1, :, :]
+                q_len -= 1
+            else:
+                key_states = key_states[:, :-1, :, :]
+                value_states = value_states[:, :-1, :, :]
 
         attn_output = self._flash_attention_forward(
             query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
         )
+
+        if self.config.mask_diagonal:
+            if _q_len == 1 and kv_seq_len == 1:
+                pass
+            elif _q_len == kv_seq_len:
+                attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+                _first_value_state = repeat_kv(value_states[:, :1, :, :], self.num_key_value_groups)
+                attn_output = torch.cat([_first_value_state.reshape(bsz, 1, self.hidden_size), attn_output], dim=1)
+                q_len += 1
+            else:
+                pass
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -1492,7 +1523,8 @@ class LlamaForCausalLM(_LlamaForCausalLM):
         seq_len = input_ids.shape[1]
         logits = []
         
-        for i in range(seq_len):
+        # since it is too slow, we'll use tqdm by default.
+        for i in trange(seq_len, leave=False):
             m_input_ids = input_ids[:, i:i+1]
             m_attention_mask = attention_mask[:, :i+1]
             m_position_ids = position_ids[:, i:i+1] if position_ids is not None else None
