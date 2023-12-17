@@ -1494,10 +1494,7 @@ class LlamaForCausalLM(_LlamaForCausalLM):
         
         for i in range(seq_len):
             m_input_ids = input_ids[:, i:i+1]
-            if len(attention_mask.shape) == 4:
-                m_attention_mask = attention_mask[:, :, i:i+1, :i+1]
-            else:
-                m_attention_mask = attention_mask[:, i:i+1]
+            m_attention_mask = attention_mask[:, :i+1]
             m_position_ids = position_ids[:, i:i+1] if position_ids is not None else None
             m_inputs_embeds = inputs_embeds[:, i:i+1] if inputs_embeds is not None else None
             
