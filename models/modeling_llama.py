@@ -1216,7 +1216,10 @@ class LlamaModel(_LlamaModel):
 
         past_key_values_length = 0
         if past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
+            if len(past_key_values[0]) == 2:
+                past_key_values_length = past_key_values[0][0].shape[2]
+            else:
+                past_key_values_length = past_key_values[0][0].shape[1]
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
