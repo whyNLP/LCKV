@@ -177,7 +177,7 @@ class LlamaAttentionBase(_LlamaAttention):
             attn_weights = attn_weights + attention_mask
         
         if self.config.mask_diagonal:
-            _min_weight = torch.finfo(attn_weights.dtype).min / 100 # if all tokens are masked, this one will be used
+            _min_weight = torch.finfo(attn_weights.dtype).min
             mask = torch.full_like(attn_weights, _min_weight)
             mask = mask.tril(diagonal=kv_seq_len - q_len).triu(diagonal=kv_seq_len - q_len)
             attn_weights = attn_weights + mask
@@ -192,8 +192,18 @@ class LlamaAttentionBase(_LlamaAttention):
                 f" {attn_output.size()}"
             )
 
-        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.transpose(1, 2)
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+
+        if self.config.mask_diagonal:
+            if q_len == 1 and kv_seq_len == 1:
+                attn_output = torch.zeros(bsz, 1, self.hidden_size, dtype=attn_output.dtype, device=attn_output.device)
+            elif q_len == kv_seq_len:
+                attn_output = torch.cat([torch.zeros(bsz, 1, self.hidden_size, dtype=attn_output.dtype, device=attn_output.device), attn_output[:, 1:, :]], dim=1)
+            else:
+                pass
+
+        attn_output = attn_output.contiguous()
 
         if self.config.pretraining_tp > 1:
             attn_output = attn_output.split(self.hidden_size // self.config.pretraining_tp, dim=2)
@@ -340,11 +350,10 @@ class LlamaFlashAttention2Base(_LlamaFlashAttention2):
 
         if self.config.mask_diagonal:
             if _q_len == 1 and kv_seq_len == 1:
-                pass
+                attn_output = torch.zeros(bsz, 1, self.hidden_size, dtype=attn_output.dtype, device=attn_output.device)
             elif _q_len == kv_seq_len:
                 attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
-                _first_value_state = repeat_kv(value_states[:, :1, :, :], self.num_key_value_groups)
-                attn_output = torch.cat([_first_value_state.reshape(bsz, 1, self.hidden_size), attn_output], dim=1)
+                attn_output = torch.cat([torch.zeros(bsz, 1, self.hidden_size, dtype=attn_output.dtype, device=attn_output.device), attn_output], dim=1)
                 q_len += 1
             else:
                 pass
