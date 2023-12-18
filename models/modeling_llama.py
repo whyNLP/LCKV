@@ -1539,7 +1539,7 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             m_position_ids = position_ids[:, i:i+1] if position_ids is not None else None
             m_inputs_embeds = inputs_embeds[:, i:i+1] if inputs_embeds is not None else None
             
-            outputs = self.forward_predict(
+            outputs = self.forward_predict_one(
                 input_ids=m_input_ids,
                 attention_mask=m_attention_mask,
                 position_ids=m_position_ids,
@@ -1580,9 +1580,78 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             hidden_states=None,
             attentions=None,
         )
-            
-    
+
     def forward_predict(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+        
+        seq_len = input_ids.shape[1]
+        logits = []
+        
+        if seq_len != 1:
+            # the prompts
+            for i in range(seq_len):
+                m_input_ids = input_ids[:, i:i+1]
+                m_attention_mask = attention_mask[:, :i+1]
+                m_position_ids = position_ids[:, i:i+1] if position_ids is not None else None
+                m_inputs_embeds = inputs_embeds[:, i:i+1] if inputs_embeds is not None else None
+                
+                outputs = self.forward_predict_one(
+                    input_ids=m_input_ids,
+                    attention_mask=m_attention_mask,
+                    position_ids=m_position_ids,
+                    past_key_values=past_key_values,
+                    inputs_embeds=m_inputs_embeds,
+                    labels=None,
+                    use_cache=True,
+                    output_attentions=False,
+                    output_hidden_states=False,
+                    return_dict=True,
+                )
+
+                logits.append(outputs.logits)
+                past_key_values = outputs.past_key_values
+            logits = torch.cat(logits, dim=1)
+
+            if not return_dict:
+                outputs = (None, logits, past_key_values)
+            else:
+                outputs = CausalLMOutputWithPast(
+                    loss=None,
+                    logits=logits,
+                    past_key_values=outputs.past_key_values,
+                    hidden_states=outputs.hidden_states,
+                    attentions=outputs.attentions,
+                )
+        
+        else:
+            # token generation
+            outputs = self.forward_predict_one(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                inputs_embeds=inputs_embeds,
+                labels=labels,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+
+        return outputs
+    
+    def forward_predict_one(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
