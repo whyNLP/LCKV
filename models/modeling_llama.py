@@ -1693,11 +1693,12 @@ class LlamaForCausalLM(_LlamaForCausalLM):
                 memory = outputs[0]
                 if past_key_values is not None:
                     memory = torch.cat([past_key_values[-1][0], memory], dim=1)
+                memory = (memory, )
             else:
                 memory = outputs[1][-1]
             new_past_key_values = outputs[1]
             new_past_key_values = new_past_key_values[:self.config.num_warmup_layers] + \
-                ((memory, ), )*(len(new_past_key_values) - self.config.num_warmup_layers)
+                (memory, )*(len(new_past_key_values) - self.config.num_warmup_layers)
             if return_dict:
                 outputs.past_key_values = new_past_key_values
             else:
