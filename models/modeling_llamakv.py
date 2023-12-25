@@ -96,7 +96,7 @@ class LlamaKVForCausalLM(_LlamaForCausalLM):
         else:
             loss_weights = [float(x) for x in self.config.loss_weights.split("_")]
         
-        for i in range(self.config.num_warmup_layers, self.config.num_hidden_layers):
+        for i in range(self.config.num_warmup_layers, self.config.num_hidden_layers-1):
             gold_key_state, gold_value_state = past_key_values[i]
             last_key_state, last_value_state = past_key_values[-1]
             bsz, num_key_value_heads, seq_len, head_dim = last_key_state.shape

@@ -77,6 +77,7 @@ class KVLlamaConfig(_LlamaConfig):
         self,
         num_warmup_layers: int = 0,
         loss_weights: str = None,
+        mask_diagonal: bool = False,
         **kwargs,
     ):
         """
@@ -88,7 +89,7 @@ class KVLlamaConfig(_LlamaConfig):
         """
         super().__init__(**kwargs)
         self.kv_pattern = "proj_kv"
-        self.mask_diagonal = False
+        self.mask_diagonal = mask_diagonal
         self.num_warmup_layers = num_warmup_layers
         self.loss_weights = loss_weights
 

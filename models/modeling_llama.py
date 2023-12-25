@@ -521,11 +521,24 @@ class LlamaAttentionProj(LlamaAttention):
     def __init__(self, config: BestLlamaConfig):
         super().__init__(config)
 
-        self._last_k_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.num_key_value_heads * self.head_dim)
-        self._last_v_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.num_key_value_heads * self.head_dim)
+        self._last_k_proj = nn.Linear(self.head_dim, self.num_key_value_heads * self.head_dim, bias=False)
+        self._last_v_proj = nn.Linear(self.head_dim, self.num_key_value_heads * self.head_dim, bias=False)
 
-        self.last_k_proj = lambda x: x + self._last_k_proj(x)
-        self.last_v_proj = lambda x: x + self._last_v_proj(x)
+        def proj(projector, x: torch.Tensor):
+            """
+            x: (bsz, kv_len, num_key_value_heads*head_dim)
+            """
+            bsz, kv_len, _ = x.size()
+            x = x.reshape(bsz, kv_len, self.num_key_value_heads, self.head_dim)
+            ys = []
+            for i in range(self.num_key_value_heads):
+                weight = projector.weight[i*self.head_dim:(i+1)*self.head_dim]
+                y = torch.matmul(x[:, :, i, :], weight)
+                ys.append(y)
+            return torch.cat(ys, dim=-1)
+
+        self.last_k_proj = lambda x: proj(self._last_k_proj, x)
+        self.last_v_proj = lambda x: proj(self._last_v_proj, x)
 
     def _inner_forward(
         self,
@@ -660,11 +673,24 @@ class LlamaFlashAttention2Proj(LlamaFlashAttention2):
     def __init__(self, config: BestLlamaConfig):
         super().__init__(config)
 
-        self._last_k_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.num_key_value_heads * self.head_dim)
-        self._last_v_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.num_key_value_heads * self.head_dim)
+        self._last_k_proj = nn.Linear(self.head_dim, self.num_key_value_heads * self.head_dim, bias=False)
+        self._last_v_proj = nn.Linear(self.head_dim, self.num_key_value_heads * self.head_dim, bias=False)
 
-        self.last_k_proj = lambda x: x + self._last_k_proj(x)
-        self.last_v_proj = lambda x: x + self._last_v_proj(x)
+        def proj(projector, x: torch.Tensor):
+            """
+            x: (bsz, kv_len, num_key_value_heads*head_dim)
+            """
+            bsz, kv_len, _ = x.size()
+            x = x.reshape(bsz, kv_len, self.num_key_value_heads, self.head_dim)
+            ys = []
+            for i in range(self.num_key_value_heads):
+                weight = projector.weight[i*self.head_dim:(i+1)*self.head_dim]
+                y = torch.matmul(x[:, :, i, :], weight)
+                ys.append(y)
+            return torch.cat(ys, dim=-1)
+
+        self.last_k_proj = lambda x: proj(self._last_k_proj, x)
+        self.last_v_proj = lambda x: proj(self._last_v_proj, x)
 
     def _inner_forward(
         self,
@@ -1080,6 +1106,8 @@ class LlamaDecoderLayer(_LlamaDecoderLayer):
         if not getattr(config, "_flash_attn_2_enabled", False):
             if layer_idx < config.num_warmup_layers:
                 return LlamaAttentionBase
+            elif layer_idx == config.num_hidden_layers - 1 and config.kv_pattern == 'proj_kv':
+                return LlamaAttentionBase
             elif config.kv_pattern == 'use_kv':
                 return LlamaAttention
             elif config.kv_pattern == 'proj_kv':
@@ -1088,6 +1116,8 @@ class LlamaDecoderLayer(_LlamaDecoderLayer):
                 return LlamaAttentionHidden
         else:
             if layer_idx < config.num_warmup_layers:
+                return LlamaFlashAttention2Base
+            elif layer_idx == config.num_hidden_layers - 1 and config.kv_pattern == 'proj_kv':
                 return LlamaFlashAttention2Base
             elif config.kv_pattern == 'use_kv':
                 return LlamaFlashAttention2
