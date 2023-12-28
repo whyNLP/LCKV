@@ -98,6 +98,42 @@ class KVLlamaConfig(_LlamaConfig):
             if len(self.loss_weights) != self.num_hidden_layers - self.num_warmup_layers:
                 raise ValueError("The number of loss weights should be equal to the number of hidden layers.")
 
+class HiddenLlamaConfig(_LlamaConfig):
+
+    model_type = "hidden-llama"
+
+    def __init__(
+        self,
+        num_warmup_layers: int = 0,
+        target_type: str = "hidden",
+        loss_weights: str = None,
+        mask_diagonal: bool = False,
+        **kwargs,
+    ):
+        """
+        Args:
+            num_warmup_layers (`int`, *optional*, defaults to 0):
+                The number of transformer blocks that will use the key-value pair in the
+                original layers as the kv cache. The rest of the transformer blocks will
+                use the key-value pair in the last layer as the kv cache.
+            target_type (`str`, *optional*, defaults to "hidden"):
+                The loss to calculate additional to KV cache. Options: 'hidden',
+                'logits' and 'outputs'.
+        """
+        super().__init__(**kwargs)
+        self.kv_pattern = "use_kv"
+        self.mask_diagonal = mask_diagonal
+        self.num_warmup_layers = num_warmup_layers
+        self.target_type = target_type
+        self.loss_weights = loss_weights
+
+        if self.target_type not in ("hidden", "logits", "outputs"):
+            raise ValueError("target_type should be one of 'hidden', 'logits' and 'outputs'.")
+        if self.loss_weights is not None:
+            loss_weights = [float(x) for x in self.loss_weights.split("_")]
+            if len(self.loss_weights) != 2:
+                raise ValueError("The number of loss weights should be equal to 2.")
+
 
 class LlamaConfigBase(_LlamaConfig):
     def __init__(

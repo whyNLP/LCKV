@@ -4,8 +4,8 @@ from .configuration_llama import BestLlamaConfig
 from .modeling_llama import LlamaForCausalLM
 from .configuration_llama import ALLlamaConfig, CycleLlamaConfig
 from .modeling_alllama import ALLlamaForCausalLM, CycleLlamaForCausalLM
-from .configuration_llama import KVLlamaConfig
-from .modeling_llamakv import LlamaKVForCausalLM
+from .configuration_llama import KVLlamaConfig, HiddenLlamaConfig
+from .modeling_llamakv import LlamaKVForCausalLM, LlamaHiddenForCausalLM
 from .wandb_callback import WandbCallback
 
 from transformers import CONFIG_MAPPING, MODEL_FOR_CAUSAL_LM_MAPPING
@@ -25,6 +25,8 @@ AutoConfig.register("cyclellama", CycleLlamaConfig)
 AutoModelForCausalLM.register(CycleLlamaConfig, CycleLlamaForCausalLM)
 AutoConfig.register("kv-llama", KVLlamaConfig)
 AutoModelForCausalLM.register(KVLlamaConfig, LlamaKVForCausalLM)
+AutoConfig.register("hidden-llama", HiddenLlamaConfig)
+AutoModelForCausalLM.register(HiddenLlamaConfig, LlamaHiddenForCausalLM)
 
 import os
 if os.environ.get('ALGPT_FLASH_ATTN', False):
