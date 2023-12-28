@@ -37,7 +37,8 @@ from transformers.models.llama.modeling_llama import LlamaModel, LlamaForCausalL
 from transformers.models.llama.configuration_llama import LlamaConfig
 from .modeling_llama import (
     LlamaModel as _LlamaModel,
-    LlamaForCausalLM as _LlamaForCausalLM
+    LlamaForCausalLM as _LlamaForCausalLM,
+    apply_rotary_pos_emb_q
 )
 from .configuration_llama import KVLlamaConfig, HiddenLlamaConfig
 
@@ -188,9 +189,9 @@ class LlamaHiddenForCausalLM(_LlamaForCausalLM):
             past_key_values=past_key_values,
             encoder_outputs=encoder_outputs_key_values,
             inputs_embeds=inputs_embeds,
-            use_cache=True,
+            use_cache=use_cache,
             output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            output_hidden_states=True,
             return_dict=return_dict,
         )
 
@@ -198,17 +199,31 @@ class LlamaHiddenForCausalLM(_LlamaForCausalLM):
         logits_bf16 = self.tgt_lm_head(hidden_states)
         logits = logits_bf16.float()
 
-        # calculate the KV loss
-        past_key_value = outputs[1][-1]
+        # loss weights
         if self.config.loss_weights is None:
             loss_weights = [1.0] * 2
         else:
             loss_weights = [float(x) for x in self.config.loss_weights.split("_")]
 
+        # calculate the KV states
+        last_hidden = outputs.hidden_states[-2]
+        last_attn = self.tgt_model.layers[-1].self_attn
+        bsz, q_len, _ = last_hidden.size()
+        key_states = last_attn.k_proj(last_hidden)
+        value_states = last_attn.v_proj(last_hidden)
+        key_states = key_states.view(bsz, q_len, last_attn.num_key_value_heads, last_attn.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, last_attn.num_key_value_heads, last_attn.head_dim).transpose(1, 2)
+        cos, sin = last_attn.rotary_emb(value_states, seq_len=q_len)
+        position_ids = torch.arange(
+            0, q_len, dtype=torch.long, device=input_ids.device
+        )
+        position_ids = position_ids.unsqueeze(0)
+        key_states = apply_rotary_pos_emb_q(key_states, cos, sin, position_ids)
+
         # the loss to mimic KV and final hidden
         # XXX: do we need to mimic the final hidden? what about the real loss?
         gold_key_state, gold_value_state = encoder_outputs_key_values
-        pred_key_state, pred_value_state = past_key_value
+        pred_key_state, pred_value_state = key_states, value_states
         loss_kv = F.mse_loss(pred_key_state, gold_key_state) + F.mse_loss(pred_value_state, gold_value_state)
         
         loss_outputs = 0
