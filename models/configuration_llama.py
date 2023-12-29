@@ -106,7 +106,7 @@ class HiddenLlamaConfig(_LlamaConfig):
         self,
         num_warmup_layers: int = 0,
         target_type: str = "hidden",
-        loss_weights: str = None,
+        loss_weights: str = "none",
         mask_diagonal: bool = False,
         **kwargs,
     ):
@@ -129,9 +129,9 @@ class HiddenLlamaConfig(_LlamaConfig):
 
         if self.target_type not in ("hidden", "logits", "outputs"):
             raise ValueError("target_type should be one of 'hidden', 'logits' and 'outputs'.")
-        if self.loss_weights is not None:
+        if self.loss_weights not in ("none", None):
             loss_weights = [float(x) for x in self.loss_weights.split("_")]
-            if len(self.loss_weights) != 2:
+            if len(loss_weights) != 2:
                 raise ValueError("The number of loss weights should be equal to 2.")
 
 

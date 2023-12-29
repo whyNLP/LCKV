@@ -200,7 +200,7 @@ class LlamaHiddenForCausalLM(_LlamaForCausalLM):
         logits = logits_bf16.float()
 
         # loss weights
-        if self.config.loss_weights is None:
+        if self.config.loss_weights in ("none", None):
             loss_weights = [1.0] * 2
         else:
             loss_weights = [float(x) for x in self.config.loss_weights.split("_")]
