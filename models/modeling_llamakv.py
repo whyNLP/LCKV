@@ -132,7 +132,7 @@ class LlamaHiddenForCausalLM(_LlamaForCausalLM):
     config_class = HiddenLlamaConfig
 
     def __init__(self, config):
-        super(LlamaHiddenForCausalLM, self).__init__(config)
+        super(_LlamaForCausalLM, self).__init__(config)
         self.tgt_model = _LlamaModel(config)
 
         if self.config.target_type != "hidden":
