@@ -207,6 +207,7 @@ class LlamaHiddenForCausalLM(_LlamaForCausalLM):
 
         # calculate the KV states
         last_hidden = outputs.hidden_states[-2]
+        last_hidden = self.tgt_model.layers[-1].input_layernorm(last_hidden)
         last_attn = self.tgt_model.layers[-1].self_attn
         bsz, q_len, _ = last_hidden.size()
         key_states = last_attn.k_proj(last_hidden)
