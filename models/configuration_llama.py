@@ -29,6 +29,8 @@ class BestLlamaConfig(_LlamaConfig):
         self,
         kv_pattern: str = "use_kv",
         train_encoder: bool = True,
+        train_last_encoder: str = "none",
+        train_kv: bool = False,
         mask_diagonal: bool = False,
         num_encoders: int = 1,
         num_warmup_layers: int = 0,
@@ -49,6 +51,9 @@ class BestLlamaConfig(_LlamaConfig):
             train_encoder (`bool`, *optional*, defaults to True):
                 Whether to train the encoder. If set to False, the encoder will be detached
                 from the computation graph when calculating the gradients.
+            train_last_encoder (`str`, *optional*, defaults to "none"):
+                Whether to train the last encoder. The value should be one of "none",
+                "encoder", "kv".
             mask_diagonal (`bool`, *optional*, defaults to False):
                 Whether to mask the diagonal of the attention matrix. This is useful when
                 the model is used for sequence generation. The training and inference
@@ -64,9 +69,14 @@ class BestLlamaConfig(_LlamaConfig):
         super().__init__(**kwargs)
         self.kv_pattern = kv_pattern
         self.train_encoder = train_encoder
+        self.train_last_encoder = train_last_encoder
+        self.train_kv = train_kv
         self.mask_diagonal = mask_diagonal
         self.num_encoders = num_encoders
         self.num_warmup_layers = num_warmup_layers
+
+        if self.train_encoder:
+            assert self.train_last_encoder == "none", "Train encoder enabled. train_last_encoder must be 'none'."
 
 
 class KVLlamaConfig(_LlamaConfig):

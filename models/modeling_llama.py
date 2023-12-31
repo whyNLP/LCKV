@@ -437,7 +437,15 @@ class LlamaAttention(LlamaAttentionBase):
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states = apply_rotary_pos_emb_q(query_states, cos, sin, position_ids)
 
-        past_key_value = (key_states, value_states) if use_cache else None
+        if use_cache:
+            _key_states = self.k_proj(hidden_states)
+            _value_states = self.v_proj(hidden_states)
+            _key_states = _key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            _value_states = _value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            _key_states = apply_rotary_pos_emb_q(_key_states, cos, sin, position_ids)
+            past_key_value = (_key_states, _value_states)
+        else:
+            past_key_value = None
 
         return query_states, key_states, value_states, kv_seq_len, past_key_value
 
@@ -512,7 +520,15 @@ class LlamaFlashAttention2(LlamaFlashAttention2Base):
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states = apply_rotary_pos_emb_q(query_states, cos, sin, position_ids)
 
-        past_key_value = (key_states, value_states) if use_cache else None
+        if use_cache:
+            _key_states = self.k_proj(hidden_states)
+            _value_states = self.v_proj(hidden_states)
+            _key_states = _key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            _value_states = _value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            _key_states = apply_rotary_pos_emb_q(_key_states, cos, sin, position_ids)
+            past_key_value = (_key_states, _value_states)
+        else:
+            past_key_value = None
 
         return query_states, key_states, value_states, kv_seq_len, past_key_value
 
@@ -600,7 +616,16 @@ class LlamaAttentionProj(LlamaAttention):
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states = apply_rotary_pos_emb_q(query_states, cos, sin, position_ids)
 
-        past_key_value = (key_states, value_states) if use_cache else None
+        # past_key_value = (key_states, value_states) if use_cache else None
+        if use_cache:
+            _key_states = self.k_proj(hidden_states)
+            _value_states = self.v_proj(hidden_states)
+            _key_states = _key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            _value_states = _value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            _key_states = apply_rotary_pos_emb_q(_key_states, cos, sin, position_ids)
+            past_key_value = (_key_states, _value_states)
+        else:
+            past_key_value = None
 
         key_states = key_states.transpose(1, 2).reshape(bsz, kv_seq_len, self.num_key_value_heads* self.head_dim)
         value_states = value_states.transpose(1, 2).reshape(bsz, kv_seq_len, self.num_key_value_heads* self.head_dim)
@@ -752,7 +777,16 @@ class LlamaFlashAttention2Proj(LlamaFlashAttention2):
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states = apply_rotary_pos_emb_q(query_states, cos, sin, position_ids)
 
-        past_key_value = (key_states, value_states) if use_cache else None
+        # past_key_value = (key_states, value_states) if use_cache else None
+        if use_cache:
+            _key_states = self.k_proj(hidden_states)
+            _value_states = self.v_proj(hidden_states)
+            _key_states = _key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            _value_states = _value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+            _key_states = apply_rotary_pos_emb_q(_key_states, cos, sin, position_ids)
+            past_key_value = (_key_states, _value_states)
+        else:
+            past_key_value = None
 
         key_states = key_states.transpose(1, 2).reshape(bsz, kv_seq_len, self.num_key_value_heads* self.head_dim)
         value_states = value_states.transpose(1, 2).reshape(bsz, kv_seq_len, self.num_key_value_heads* self.head_dim)
@@ -1463,6 +1497,9 @@ class LlamaForCausalLM(_LlamaForCausalLM):
         for i in range(self.config.num_encoders):
             
             context = dummy_context if self.config.train_encoder else torch.no_grad()
+            if self.config.train_last_encoder == "encoder":
+                if i == self.config.num_encoders - 1:
+                    context = dummy_context
 
             with context:
                 # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
@@ -1475,7 +1512,7 @@ class LlamaForCausalLM(_LlamaForCausalLM):
                     inputs_embeds=inputs_embeds,
                     use_cache=True, # we are using past_key_values to do decoding
                     output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
+                    output_hidden_states=True,
                     return_dict=True, # we want to retrive the past_key_values
                 )
 
@@ -1488,8 +1525,32 @@ class LlamaForCausalLM(_LlamaForCausalLM):
                 if past_hiddens is not None:
                     encoder_outputs = torch.cat([past_hiddens, encoder_outputs], dim=1)
                 old_kv = (*tmp_kv, encoder_outputs)
+            elif not self.config.train_encoder and self.config.train_last_encoder == "kv" and i == self.config.num_encoders - 1:
+                # re-calculate the KV states to get the gradients
+                last_hidden = encoder_outputs.hidden_states[-2]
+                last_hidden = self.model.layers[-1].input_layernorm(last_hidden)
+                last_attn = self.model.layers[-1].self_attn
+                bsz, q_len, _ = last_hidden.size()
+                key_states = last_attn.k_proj(last_hidden)
+                value_states = last_attn.v_proj(last_hidden)
+                key_states = key_states.view(bsz, q_len, last_attn.num_key_value_heads, last_attn.head_dim).transpose(1, 2)
+                value_states = value_states.view(bsz, q_len, last_attn.num_key_value_heads, last_attn.head_dim).transpose(1, 2)
+                cos, sin = last_attn.rotary_emb(value_states, seq_len=q_len)
+                position_ids = torch.arange(
+                    0, q_len, dtype=torch.long, device=input_ids.device
+                )
+                position_ids = position_ids.unsqueeze(0)
+                key_states = apply_rotary_pos_emb_q(key_states, cos, sin, position_ids)
+                encoder_outputs = (key_states, value_states)
             else:
                 encoder_outputs = encoder_outputs.past_key_values[-1]
+            
+            # if "old_key_states" not in locals():
+            #     old_key_states = encoder_outputs[0]
+            # else:
+            #     print(i, F.mse_loss(old_key_states, encoder_outputs[0]))
+            #     old_key_states = encoder_outputs[0]
+            # breakpoint()
 
         outputs = self.model(
             input_ids=input_ids,
@@ -1498,11 +1559,17 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             past_key_values=past_key_values,
             encoder_outputs=encoder_outputs,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
+            use_cache=use_cache or self.config.train_kv,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        
+        if self.config.train_kv:
+            # the loss to mimic KV and final hidden
+            gold_key_state, gold_value_state = encoder_outputs
+            pred_key_state, pred_value_state = outputs[1][-1]
+            loss_kv = F.mse_loss(pred_key_state, gold_key_state) + F.mse_loss(pred_value_state, gold_value_state)
 
         if old_kv is None:
             old_kv = outputs.past_key_values
@@ -1534,6 +1601,9 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
+
+            if self.config.train_kv:
+                loss = loss + loss_kv
 
         if not return_dict:
             output = (logits,) + outputs[1:]
