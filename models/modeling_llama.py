@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch LLaMA model."""
+import os
 import math
 import warnings
 from tqdm import trange
@@ -1439,7 +1440,11 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             )
         elif labels is not None:
             # inference
-            return self.forward_training(
+            if os.environ.get("ALGPT_INFERENCE", False):
+                func = self.forward_inference
+            else:
+                func = self.forward_training
+            return func(
                 input_ids,
                 attention_mask,
                 position_ids,
