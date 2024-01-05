@@ -1499,6 +1499,13 @@ class LlamaForCausalLM(_LlamaForCausalLM):
 
         old_kv = None
         encoder_outputs = None
+
+        if self.config.kv_pattern == 'use_kv' and not self.config.train_encoder:
+            # initialize kv w/ zero
+            bsz, q_len = input_ids.size()
+            zero_states = torch.zeros(bsz, self.config.num_key_value_heads, q_len, self.config.hidden_size // self.config.num_attention_heads, device=input_ids.device, dtype=self.dtype)
+            encoder_outputs = (zero_states, zero_states)
+        
         for i in range(self.config.num_encoders):
             
             context = dummy_context if self.config.train_encoder else torch.no_grad()
