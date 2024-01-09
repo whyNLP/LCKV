@@ -365,6 +365,11 @@ def main():
         help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit",
     )
     parser.add_argument("--jit", action="store_true", help="Whether or not to use jit trace to accelerate inference")
+    parser.add_argument("--torch_dtype", type=str, default=None, help=(
+            "Override the default `torch.dtype` and load the model under this dtype. If `auto` is passed, the "
+            "dtype will be automatically derived from the model's weights."
+    ), choices=["auto", "bfloat16", "float16", "float32"])
+    parser.add_argument("--no_show", action="store_true", help="Whether or not to show the generated text")
     args = parser.parse_args()
 
     # Initialize the distributed state.
@@ -397,7 +402,12 @@ def main():
     import os
     if os.environ.get('ALGPT_FLASH_ATTN', False):
         config._flash_attn_2_enabled = True
-    model = model_class.from_pretrained(args.model_name_or_path, config=config)
+    torch_dtype = (
+        args.torch_dtype
+        if args.torch_dtype in ["auto", None]
+        else getattr(torch, args.torch_dtype)
+    )
+    model = model_class.from_pretrained(args.model_name_or_path, config=config, torch_dtype=torch_dtype)
 
     # Set the model to the right device
     model.to(distributed_state.device)
@@ -474,6 +484,9 @@ def main():
         output_sequences.squeeze_()
 
     generated_sequences = []
+
+    if args.no_show:
+        return generated_sequences
 
     for generated_sequence_idx, generated_sequence in enumerate(output_sequences):
         print(f"=== GENERATED SEQUENCE {generated_sequence_idx + 1} ===")
