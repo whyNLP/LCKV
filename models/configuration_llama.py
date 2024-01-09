@@ -78,6 +78,42 @@ class BestLlamaConfig(_LlamaConfig):
         if self.train_encoder:
             assert self.train_last_encoder == "none", "Train encoder enabled. train_last_encoder must be 'none'."
 
+class OptLlamaConfig(_LlamaConfig):
+
+    model_type = "opt-llama"
+
+    def __init__(
+        self,
+        train_last_encoder: str = "none",
+        train_kv: bool = False,
+        num_encoders: int = 1,
+        num_warmup_layers: int = 0,
+        **kwargs,
+    ):
+        """
+        Args:
+            train_last_encoder (`str`, *optional*, defaults to "none"):
+                Whether to train the last encoder. The value should be one of "none",
+                "encoder" or an integer for the number of encoders to train.
+            train_kv (`bool`, *optional*, defaults to False):
+                Whether to train the key-value pair. If set to True, the loss will be
+                added with the MSE loss of the key-value pair in the last layer before
+                and after the decoder. This helps the KV cache to converge so that the
+                training and inference will be consistent, but hurts the performance.
+            num_encoders (`int`, *optional*, defaults to 1):
+                The number of encoders. x encoders will ensure the starting x tokens in
+                prediction is consistent with training.
+            num_warmup_layers (`int`, *optional*, defaults to 0):
+                The number of transformer blocks that will use the key-value pair in the
+                original layers as the kv cache. The rest of the transformer blocks will
+                use the key-value pair in the last layer as the kv cache.
+        """
+        super().__init__(**kwargs)
+        self.train_last_encoder = train_last_encoder
+        self.train_kv = train_kv
+        self.num_encoders = num_encoders
+        self.num_warmup_layers = num_warmup_layers
+
 
 class KVLlamaConfig(_LlamaConfig):
 

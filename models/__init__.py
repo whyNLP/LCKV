@@ -2,6 +2,8 @@ from .configuration_gpt2 import GPT2Config, ALGPT2Config, CycleGPT2Config
 from .modeling_gpt2 import GPT2LMHeadModel, ALGPT2LMHeadModel, CycleGPT2LMHeadModel
 from .configuration_llama import BestLlamaConfig
 from .modeling_llama import LlamaForCausalLM
+from .configuration_llama import OptLlamaConfig
+from .modeling_llama_opt import LlamaForCausalLM as OptLlamaForCausalLM
 from .configuration_llama import ALLlamaConfig, CycleLlamaConfig
 from .modeling_alllama import ALLlamaForCausalLM, CycleLlamaForCausalLM
 from .configuration_llama import KVLlamaConfig, HiddenLlamaConfig
@@ -27,6 +29,8 @@ AutoConfig.register("kv-llama", KVLlamaConfig)
 AutoModelForCausalLM.register(KVLlamaConfig, LlamaKVForCausalLM)
 AutoConfig.register("hidden-llama", HiddenLlamaConfig)
 AutoModelForCausalLM.register(HiddenLlamaConfig, LlamaHiddenForCausalLM)
+AutoConfig.register("opt-llama", OptLlamaConfig)
+AutoModelForCausalLM.register(OptLlamaConfig, OptLlamaForCausalLM)
 
 import os
 if os.environ.get('ALGPT_FLASH_ATTN', False):
@@ -40,6 +44,8 @@ if os.environ.get('ALGPT_FUSED_RMSNORM', False):
     transformers.models.llama.modeling_llama.LlamaRMSNorm = RMSNorm
     from . import modeling_llama
     modeling_llama.LlamaRMSNorm = RMSNorm
+    from . import modeling_llama_opt
+    modeling_llama_opt.LlamaRMSNorm = RMSNorm
     from . import modeling_alllama
     modeling_alllama.LlamaRMSNorm = RMSNorm
 
@@ -49,6 +55,8 @@ if os.environ.get('ALGPT_FUSED_CROSSENTROPY', False):
     transformers.models.llama.modeling_llama.CrossEntropyLoss = CrossEntropyLoss
     from . import modeling_llama
     modeling_llama.CrossEntropyLoss = CrossEntropyLoss
+    from . import modeling_llama_opt
+    modeling_llama_opt.CrossEntropyLoss = CrossEntropyLoss
     from . import modeling_alllama
     modeling_alllama.CrossEntropyLoss = CrossEntropyLoss
 
@@ -70,6 +78,10 @@ if os.environ.get('ALGPT_FUSED_ROTARY', False):
     modeling_llama.apply_rotary_pos_emb = fused_apply_rotary_pos_emb
     modeling_llama.apply_rotary_pos_emb_q = fused_apply_rotary_pos_emb_q
 
+    from . import modeling_llama_opt
+    modeling_llama_opt.apply_rotary_pos_emb = fused_apply_rotary_pos_emb
+    modeling_llama_opt.apply_rotary_pos_emb_q = fused_apply_rotary_pos_emb_q
+
     from . import modeling_llamakv
     modeling_llamakv.apply_rotary_pos_emb_q = fused_apply_rotary_pos_emb_q
 
@@ -79,3 +91,5 @@ if os.environ.get('ALGPT_FUSED_SWIGLU', False):
     from . import modeling_llama
     modeling_llama.LlamaMLP = LlamaMLP
     transformers.models.llama.modeling_llama.LlamaMLP = LlamaMLP
+    from . import modeling_llama_opt
+    modeling_llama_opt.LlamaMLP = LlamaMLP
