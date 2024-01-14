@@ -231,7 +231,7 @@ class LlamaAttentionBase(_LlamaAttention):
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
-        query_states = query_states[:, :, :-1, :]
+        query_states = query_states[:, :, 1:, :]
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
