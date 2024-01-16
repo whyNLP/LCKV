@@ -1,4 +1,5 @@
 import os
+from typing import Iterator
 
 os.environ['ALGPT_FLASH_ATTN'] = '1'
 os.environ['ALGPT_FUSED_RMSNORM'] = '1'
@@ -19,77 +20,49 @@ import torch
 import time
 set_seed(42)
 
-def prepare(model: str, size: str):
-    # llama_hf = "yahma/llama-7b-hf"
-    llama_hf = "huggyllama/llama-7b"
-    tiny_llama = "TinyLlama/TinyLlama-1.1B-intermediate-step-955k-token-2T"
-    llama_tiny = "configs/llama/config_tiny.json"
-
-    if model == "opt-llama" and size == "7b":
-        tokenizer = AutoTokenizer.from_pretrained(llama_hf)
-        config = OptLlamaForCausalLM.config_class.from_pretrained(llama_hf)
-        config._flash_attn_2_enabled = True
-        config.num_encoders = 8
-        config.num_warmup_layers = 2
-        model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
-    elif model == "opt-llama-zero" and size == "7b":
-        tokenizer = AutoTokenizer.from_pretrained(llama_hf)
-        config = OptLlamaForCausalLM.config_class.from_pretrained(llama_hf)
-        config._flash_attn_2_enabled = True
-        config.num_encoders = 0
-        config.num_warmup_layers = 0
-        model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
-    elif model == "llama" and size == "7b":
-        tokenizer = AutoTokenizer.from_pretrained(llama_hf)
-        config = AutoConfig.from_pretrained(llama_hf)
-        config._flash_attn_2_enabled = True
-        model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
-    elif model == "opt-llama" and size == "1.1b":
-        tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
-        config = OptLlamaForCausalLM.config_class.from_pretrained(tiny_llama)
-        config._flash_attn_2_enabled = True
-        config.num_encoders = 8
-        config.num_warmup_layers = 2
-        model = OptLlamaForCausalLM.from_pretrained(tiny_llama, config=config, torch_dtype=torch.bfloat16)
-    elif model == "opt-llama-zero" and size == "1.1b":
-        tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
-        config = OptLlamaForCausalLM.config_class.from_pretrained(tiny_llama)
-        config._flash_attn_2_enabled = True
-        config.num_encoders = 0
-        config.num_warmup_layers = 0
-        model = OptLlamaForCausalLM.from_pretrained(tiny_llama, config=config, torch_dtype=torch.bfloat16)
-    elif model == "llama" and size == "1.1b":
-        tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
-        config = AutoConfig.from_pretrained(tiny_llama)
-        config._flash_attn_2_enabled = True
-        model = AutoModelForCausalLM.from_pretrained(tiny_llama, config=config, torch_dtype=torch.bfloat16)
-    elif model == "opt-llama" and size == "50M":
-        tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
-        config = OptLlamaForCausalLM.config_class.from_pretrained(llama_tiny)
-        config._flash_attn_2_enabled = True
-        config.num_encoders = 8
-        config.num_warmup_layers = 2
-        model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
-    elif model == "opt-llama-zero" and size == "50M":
-        tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
-        config = OptLlamaForCausalLM.config_class.from_pretrained(llama_tiny)
-        config._flash_attn_2_enabled = True
-        config.num_encoders = 0
-        config.num_warmup_layers = 0
-        model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
-    elif model == "llama" and size == "50M":
-        tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
-        config = AutoConfig.from_pretrained(llama_tiny)
-        config._flash_attn_2_enabled = True
-        model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
-
-    print("# of trainable parameters:", get_model_param_count(model, True))
-
-    return tokenizer, model
-
-# tokenizer, model = prepare("opt-llama-zero", "7b")
-# print("# of trainable parameters:", get_model_param_count(model, True))
-
+class BinarySearch:
+    """
+    Binary Search w/o maximum limit, search the upper bound by doubling the index.
+    """
+    def __init__(self, min: int = 0):
+        self.low = min
+        self.high = None
+        self.nxt = min + 1
+    
+    def __iter__(self):
+        return self
+    
+    def __next__(self):
+        if self.high is None:
+            return self.nxt
+        elif self.low == self.high:
+            raise StopIteration
+        else:
+            return self.nxt
+    
+    def report(self, idx: int, result: bool):
+        if self.high is None:
+            if idx <= self.low:
+                if not result:
+                    raise ValueError(f"We've proven that {self.low} is feasible, but {idx} is not.")
+            else:
+                if not result:
+                    self.high = idx - 1
+                    self.nxt = (self.low + self.high) // 2
+                else:
+                    self.low = idx
+                    self.nxt = idx * 2
+        else:
+            if idx < self.low or idx > self.high:
+                raise ValueError(f"Index {idx} is out of range [{self.low}, {self.high}]")
+            else:
+                if not result:
+                    self.high = idx - 1
+                else:
+                    self.low = idx
+                self.nxt = (self.low + self.high) // 2
+        if self.nxt == self.low:
+            self.nxt = self.high
 
 def get_hf_model(model_name, config, dtype, cpu_offload, disk_offload, offload_dir, num_gpus):
     if num_gpus == 1 and dtype != torch.int8:
@@ -143,8 +116,135 @@ def get_hf_model(model_name, config, dtype, cpu_offload, disk_offload, offload_d
     model.eval()
     return model
 
-# model = get_hf_model("outputs/llama_7b_bf16", config, torch.bfloat16, True, False, None, 1)
-# model = get_hf_model("outputs/bestllama_7b_bf16", config, torch.bfloat16, True, False, None, 1)
+
+distributed_state = PartialState()
+
+def prepare(model: str, size: str):
+    # llama_hf = "yahma/llama-7b-hf"
+    llama_hf = "huggyllama/llama-7b"
+    llama_hf_30b = "huggyllama/llama-30b"
+    tiny_llama = "TinyLlama/TinyLlama-1.1B-intermediate-step-955k-token-2T"
+    llama_tiny = "configs/llama/config_tiny.json"
+
+    if model == "opt-llama" and size == "7b":
+        tokenizer = AutoTokenizer.from_pretrained(llama_hf)
+        config = OptLlamaForCausalLM.config_class.from_pretrained(llama_hf)
+        config._flash_attn_2_enabled = True
+        config.num_encoders = 8
+        config.num_warmup_layers = 2
+        model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
+        model.to(distributed_state.device)
+    elif model == "opt-llama-zero" and size == "7b":
+        tokenizer = AutoTokenizer.from_pretrained(llama_hf)
+        config = OptLlamaForCausalLM.config_class.from_pretrained(llama_hf)
+        config._flash_attn_2_enabled = True
+        config.num_encoders = 0
+        config.num_warmup_layers = 0
+        model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
+        model.to(distributed_state.device)
+    elif model == "llama" and size == "7b":
+        tokenizer = AutoTokenizer.from_pretrained(llama_hf)
+        config = AutoConfig.from_pretrained(llama_hf)
+        config._flash_attn_2_enabled = True
+        model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
+        model.to(distributed_state.device)
+    elif model == "opt-llama" and size == "1.1b":
+        tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
+        config = OptLlamaForCausalLM.config_class.from_pretrained(tiny_llama)
+        config._flash_attn_2_enabled = True
+        config.num_encoders = 8
+        config.num_warmup_layers = 2
+        model = OptLlamaForCausalLM.from_pretrained(tiny_llama, config=config, torch_dtype=torch.bfloat16)
+        model.to(distributed_state.device)
+    elif model == "opt-llama-zero" and size == "1.1b":
+        tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
+        config = OptLlamaForCausalLM.config_class.from_pretrained(tiny_llama)
+        config._flash_attn_2_enabled = True
+        config.num_encoders = 0
+        config.num_warmup_layers = 0
+        model = OptLlamaForCausalLM.from_pretrained(tiny_llama, config=config, torch_dtype=torch.bfloat16)
+        model.to(distributed_state.device)
+    elif model == "llama" and size == "1.1b":
+        tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
+        config = AutoConfig.from_pretrained(tiny_llama)
+        config._flash_attn_2_enabled = True
+        model = AutoModelForCausalLM.from_pretrained(tiny_llama, config=config, torch_dtype=torch.bfloat16)
+        model.to(distributed_state.device)
+    elif model == "opt-llama" and size == "50M":
+        tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
+        config = OptLlamaForCausalLM.config_class.from_pretrained(llama_tiny)
+        config._flash_attn_2_enabled = True
+        config.num_encoders = 8
+        config.num_warmup_layers = 2
+        model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
+        model.to(distributed_state.device)
+    elif model == "opt-llama-zero" and size == "50M":
+        tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
+        config = OptLlamaForCausalLM.config_class.from_pretrained(llama_tiny)
+        config._flash_attn_2_enabled = True
+        config.num_encoders = 0
+        config.num_warmup_layers = 0
+        model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
+        model.to(distributed_state.device)
+    elif model == "llama" and size == "50M":
+        tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
+        config = AutoConfig.from_pretrained(llama_tiny)
+        config._flash_attn_2_enabled = True
+        model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
+        model.to(distributed_state.device)
+    elif model == "opt-llama" and size == "30b":
+        tokenizer = AutoTokenizer.from_pretrained(llama_hf_30b)
+        config = OptLlamaForCausalLM.config_class.from_pretrained(llama_hf_30b)
+        config._flash_attn_2_enabled = True
+        config.num_encoders = 8
+        config.num_warmup_layers = 2
+        model = get_hf_model(
+            model_name = llama_hf_30b, 
+            config = config,
+            dtype = torch.bfloat16, 
+            cpu_offload = True,
+            disk_offload = False, 
+            offload_dir = None, 
+            num_gpus = 1
+        )
+    elif model == "opt-llama-zero" and size == "30b":
+        tokenizer = AutoTokenizer.from_pretrained(llama_hf_30b)
+        config = OptLlamaForCausalLM.config_class.from_pretrained(llama_hf_30b)
+        config._flash_attn_2_enabled = True
+        config.num_encoders = 0
+        config.num_warmup_layers = 0
+        model = get_hf_model(
+            model_name = llama_hf_30b, 
+            config = config,
+            dtype = torch.bfloat16, 
+            cpu_offload = True,
+            disk_offload = False, 
+            offload_dir = None, 
+            num_gpus = 1
+        )
+    elif model == "llama" and size == "30b":
+        tokenizer = AutoTokenizer.from_pretrained(llama_hf_30b)
+        config = AutoConfig.from_pretrained(llama_hf_30b)
+        config._flash_attn_2_enabled = True
+        model = get_hf_model(
+            model_name = llama_hf_30b, 
+            config = config,
+            dtype = torch.bfloat16, 
+            cpu_offload = True,
+            disk_offload = False, 
+            offload_dir = None, 
+            num_gpus = 1
+        )
+
+    print("# of trainable parameters:", get_model_param_count(model, True))
+    model.eval()
+
+    return tokenizer, model
+
+# tokenizer, model = prepare("opt-llama-zero", "30b")
+# print("# of trainable parameters:", get_model_param_count(model, True))
+# model.to('cuda')
+
 
 prompt_text_2048 = """The meaning of life is the solution to life's problems.'
 
@@ -303,8 +403,6 @@ def experiment(tokenizer, model, prompt, max_length, iterator):
     input_ids = tokenizer.encode(prompt, add_special_tokens=False, return_tensors="pt")
 
     # move to cuda
-    distributed_state = PartialState()
-    model.to(distributed_state.device)
     input_ids = input_ids.to(distributed_state.device)
     model.eval()
 
@@ -328,43 +426,95 @@ def experiment(tokenizer, model, prompt, max_length, iterator):
         end = time.time()
 
         return end - start
+    
+    if isinstance(iterator, Iterator):
 
-    for i in iterator:
-        # print the current date and time
-        try:
-            t = run(i)
-            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}] bsz: {i:3}, time: {t}")
-        except Exception as e:
-            print(e)
-            return
+        for i in iterator:
+            # print the current date and time
+            try:
+                t = run(i)
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}] bsz: {i:3}, time: {t}")
+            except Exception as e:
+                print(e)
+                return
+    
+    else:
+
+        iterator = BinarySearch(0 if iterator is None else iterator)
+        for i in iterator:
+            try:
+                t = run(i)
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}] bsz: {i:3}, time: {t}")
+                iterator.report(i, True)
+            except Exception as e:
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}] bsz: {i:3}, FAIL")
+                print(e)
+                iterator.report(i, False)
+        return iterator.nxt
 
 
 def main():
     LARGE_NUM = 1000000
 
-    print(">>> tiny-llama 5+8187 llama")
-    tokenizer, model = prepare("llama", "1.1b")
-    experiment(tokenizer, model, prompt_text_5, 5+8187, range(16, LARGE_NUM, 16))
+    # print(">>> tiny-llama 5+8187 llama")
+    # tokenizer, model = prepare("llama", "1.1b")
+    # experiment(tokenizer, model, prompt_text_5, 5+8187, range(16, LARGE_NUM, 16))
 
-    print(">>> tiny-llama 5+8187 opt-llama")
-    tokenizer, model = prepare("opt-llama", "1.1b")
-    experiment(tokenizer, model, prompt_text_5, 5+8187, range(16, LARGE_NUM, 16))
+    # print(">>> tiny-llama 5+8187 opt-llama")
+    # tokenizer, model = prepare("opt-llama", "1.1b")
+    # experiment(tokenizer, model, prompt_text_5, 5+8187, range(16, LARGE_NUM, 16))
 
-    print(">>> tiny-llama 5+8187 opt-llama-zero")
-    tokenizer, model = prepare("opt-llama-zero", "1.1b")
-    experiment(tokenizer, model, prompt_text_5, 5+8187, range(16, LARGE_NUM, 16))
+    # print(">>> tiny-llama 5+8187 opt-llama-zero")
+    # tokenizer, model = prepare("opt-llama-zero", "1.1b")
+    # experiment(tokenizer, model, prompt_text_5, 5+8187, range(640, LARGE_NUM, 32))
 
-    print(">>> llama-7b 512+1024 llama")
+    print(">>> llama-7b 512+512 llama")
     tokenizer, model = prepare("llama", "7b")
-    experiment(tokenizer, model, prompt_text_512, 512+1024, range(1, LARGE_NUM, 1))
+    experiment(tokenizer, model, prompt_text_512, 512+512, 1)
 
-    print(">>> llama-7b 512+1024 opt-llama")
+    print(">>> llama-7b 512+512 opt-llama")
     tokenizer, model = prepare("opt-llama", "7b")
-    experiment(tokenizer, model, prompt_text_512, 512+1024, range(8, LARGE_NUM, 8))
+    experiment(tokenizer, model, prompt_text_512, 512+512, 1)
 
-    print(">>> llama-7b 512+1024 opt-llama-zero")
+    print(">>> llama-7b 512+512 opt-llama-zero")
     tokenizer, model = prepare("opt-llama-zero", "7b")
-    experiment(tokenizer, model, prompt_text_512, 512+1024, range(16, LARGE_NUM, 16))
+    experiment(tokenizer, model, prompt_text_512, 512+512, 1)
+
+    # print(">>> llama-7b 512+1024 llama")
+    # tokenizer, model = prepare("llama", "7b")
+    # experiment(tokenizer, model, prompt_text_512, 512+1024, range(1, LARGE_NUM, 1))
+
+    # print(">>> llama-7b 512+1024 opt-llama")
+    # tokenizer, model = prepare("opt-llama", "7b")
+    # experiment(tokenizer, model, prompt_text_512, 512+1024, range(8, LARGE_NUM, 8))
+
+    # print(">>> llama-7b 512+1024 opt-llama-zero")
+    # tokenizer, model = prepare("opt-llama-zero", "7b")
+    # experiment(tokenizer, model, prompt_text_512, 512+1024, range(16, LARGE_NUM, 16))
+
+    # print(">>> llama-30b 512+32 llama")
+    # tokenizer, model = prepare("llama", "30b")
+    # experiment(tokenizer, model, prompt_text_512, 512+32, range(2, LARGE_NUM, 2))
+
+    # print(">>> llama-30b 512+32 opt-llama")
+    # tokenizer, model = prepare("opt-llama", "30b")
+    # experiment(tokenizer, model, prompt_text_512, 512+32, 31)
+
+    # print(">>> llama-30b 512+32 opt-llama-zero")
+    # tokenizer, model = prepare("opt-llama-zero", "30b")
+    # experiment(tokenizer, model, prompt_text_512, 512+32, 31)
+
+    # print(">>> llama-30b 512+1024 llama")
+    # tokenizer, model = prepare("llama", "30b")
+    # experiment(tokenizer, model, prompt_text_512, 512+1024, 1)
+
+    # print(">>> llama-30b 512+1024 opt-llama")
+    # tokenizer, model = prepare("opt-llama", "30b")
+    # experiment(tokenizer, model, prompt_text_512, 512+1024, 0)
+
+    # print(">>> llama-30b 512+1024 opt-llama-zero")
+    # tokenizer, model = prepare("opt-llama-zero", "30b")
+    # experiment(tokenizer, model, prompt_text_512, 512+1024, 0)
 
 
 if __name__ == "__main__":
