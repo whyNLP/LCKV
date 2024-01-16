@@ -7,6 +7,8 @@ os.environ['ALGPT_FUSED_CROSSENTROPY'] = '1'
 # os.environ['ALGPT_FUSED_ROTARY'] = '1'
 os.environ['ALGPT_FUSED_SWIGLU'] = '1'
 
+os.environ['ALGPT_GENERATION'] = '1'
+
 from models import OptLlamaForCausalLM
 from transformers import (
     AutoTokenizer,

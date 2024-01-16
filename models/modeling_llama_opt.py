@@ -1245,6 +1245,12 @@ class LlamaForCausalLM(_LlamaForCausalLM):
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
 
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         if self.training:
             # training
             return self.forward_training(
@@ -1305,12 +1311,6 @@ class LlamaForCausalLM(_LlamaForCausalLM):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         assert past_key_values is None, "past_key_values is not supported for training."
         assert not use_cache, "use_cache is not supported for training."
@@ -1632,16 +1632,17 @@ class LlamaForCausalLM(_LlamaForCausalLM):
                 outputs = tuple(outputs[0], new_past_key_values, *outputs[2:])
 
         hidden_states = outputs[0]
-        # if self.config.pretraining_tp > 1:
-        #     lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.config.pretraining_tp, dim=0)
-        #     logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
-        #     logits = torch.cat(logits, dim=-1)
-        # else:
-        #     logits = self.lm_head(hidden_states)
+        if os.environ.get("ALGPT_GENERATION", False):
+            # only use the last token
+            logits = self.lm_head(hidden_states[:,-1:,:])
+        else:
+            if self.config.pretraining_tp > 1:
+                lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.config.pretraining_tp, dim=0)
+                logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
+                logits = torch.cat(logits, dim=-1)
+            else:
+                logits = self.lm_head(hidden_states)
         # logits = logits.float()
-
-        # XXX: can we only use the last token?
-        logits = self.lm_head(hidden_states[:,-1:,:])
 
         loss = None
         if labels is not None:
