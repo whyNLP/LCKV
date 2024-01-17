@@ -1515,7 +1515,7 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             logits = []
             for i in range(seq_len):
                 m_input_ids = input_ids[:, i:i+1]
-                m_attention_mask = attention_mask[:, :i+1]
+                m_attention_mask = attention_mask[:, :i+1] if attention_mask is not None else None
                 m_position_ids = position_ids[:, i:i+1] if position_ids is not None else None
                 m_inputs_embeds = inputs_embeds[:, i:i+1] if inputs_embeds is not None else None
                 
