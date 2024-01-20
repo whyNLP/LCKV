@@ -5,7 +5,7 @@ os.environ['ALGPT_FLASH_ATTN'] = '1'
 os.environ['ALGPT_FUSED_RMSNORM'] = '1'
 os.environ['ALGPT_FUSED_CROSSENTROPY'] = '1'
 # os.environ['ALGPT_FUSED_ROTARY'] = '1'
-os.environ['ALGPT_FUSED_SWIGLU'] = '1'
+# os.environ['ALGPT_FUSED_SWIGLU'] = '1'
 
 os.environ['ALGPT_GENERATION'] = '1'
 
@@ -66,6 +66,69 @@ class BinarySearch:
         if self.nxt == self.low:
             self.nxt = self.high
 
+def get_ds_model(model_name, config, dtype, cpu_offload, disk_offload, offload_dir, num_gpus = 1):
+    import deepspeed
+    import torch.distributed as dist
+    from transformers.deepspeed import HfDeepSpeedConfig
+
+    hidden_size = config.hidden_size
+    # debug: ModuleNotFoundError: No module named 'mpi4py'
+    ## launch with deepspeed <filename>.py
+    deepspeed.init_distributed("nccl")
+    rank = dist.get_rank()
+    pin_memory = True
+
+    ds_config = {
+        "fp16": {
+            "enabled": dtype == torch.float16,
+        },
+        "bf16": {
+            "enabled": dtype == torch.bfloat16,
+        },
+        "zero_optimization": {
+            "stage": 3,
+            "stage3_prefetch_bucket_size": hidden_size * hidden_size,
+            "stage3_param_persistence_threshold": 0,
+        },
+        "steps_per_print": 2000,
+        "train_batch_size": 1,
+        "wall_clock_breakdown": False,
+    }
+
+    if cpu_offload:
+        ds_config["zero_optimization"]["offload_param"] = dict(
+            device="cpu", pin_memory=pin_memory)
+
+    if disk_offload:
+        ds_config["zero_optimization"]["offload_param"] = dict(
+            device="nvme",
+            pin_memory=True,
+            nvme_path=offload_dir,
+            buffer_count=5,
+            buffer_size=2 * (1 << 30),
+        )
+        ds_config["aio"] = {
+          "block_size": 1048576,
+          "queue_depth": 8,
+          "thread_count": 1,
+          "single_submit": False,
+          "overlap_events": True,
+        }
+
+    # dschf = HfDeepSpeedConfig(ds_config)
+
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name, 
+        config=config,
+        torch_dtype=dtype
+    )
+    model = model.eval()
+    ds_engine = deepspeed.initialize(model=model, config_params=ds_config)[0]
+    ds_engine.module.eval()
+    model = ds_engine.module
+
+    return model
+
 def get_hf_model(model_name, config, dtype, cpu_offload, disk_offload, offload_dir, num_gpus):
     if num_gpus == 1 and dtype != torch.int8:
         # Here we use a custom device_map instead of device_map == "auto"
@@ -121,7 +184,7 @@ def get_hf_model(model_name, config, dtype, cpu_offload, disk_offload, offload_d
 
 distributed_state = PartialState()
 
-def prepare(model: str, size: str):
+def prepare(model: str, size: str, cpu_offload: str = "none"):
     # llama_hf = "yahma/llama-7b-hf"
     llama_hf = "huggyllama/llama-7b"
     llama_hf_30b = "huggyllama/llama-30b"
@@ -194,7 +257,7 @@ def prepare(model: str, size: str):
         config._flash_attn_2_enabled = True
         model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
         model.to(distributed_state.device)
-    elif model == "opt-llama" and size == "30b":
+    elif model == "opt-llama" and size == "30b" and cpu_offload == "hf":
         tokenizer = AutoTokenizer.from_pretrained(llama_hf_30b)
         config = OptLlamaForCausalLM.config_class.from_pretrained(llama_hf_30b)
         config._flash_attn_2_enabled = True
@@ -209,7 +272,7 @@ def prepare(model: str, size: str):
             offload_dir = None, 
             num_gpus = 1
         )
-    elif model == "opt-llama-zero" and size == "30b":
+    elif model == "opt-llama-zero" and size == "30b" and cpu_offload == "hf":
         tokenizer = AutoTokenizer.from_pretrained(llama_hf_30b)
         config = OptLlamaForCausalLM.config_class.from_pretrained(llama_hf_30b)
         config._flash_attn_2_enabled = True
@@ -224,7 +287,7 @@ def prepare(model: str, size: str):
             offload_dir = None, 
             num_gpus = 1
         )
-    elif model == "llama" and size == "30b":
+    elif model == "llama" and size == "30b" and cpu_offload == "hf":
         tokenizer = AutoTokenizer.from_pretrained(llama_hf_30b)
         config = AutoConfig.from_pretrained(llama_hf_30b)
         config._flash_attn_2_enabled = True
@@ -236,6 +299,46 @@ def prepare(model: str, size: str):
             disk_offload = False, 
             offload_dir = None, 
             num_gpus = 1
+        )
+    elif model == "opt-llama" and size == "30b" and cpu_offload == "ds":
+        tokenizer = AutoTokenizer.from_pretrained(llama_hf_30b)
+        config = OptLlamaForCausalLM.config_class.from_pretrained(llama_hf_30b)
+        config._flash_attn_2_enabled = True
+        config.num_encoders = 8
+        config.num_warmup_layers = 2
+        model = get_ds_model(
+            model_name = llama_hf_30b, 
+            config = config,
+            dtype = torch.bfloat16, 
+            cpu_offload = True,
+            disk_offload = False, 
+            offload_dir = None
+        )
+    elif model == "opt-llama-zero" and size == "30b" and cpu_offload == "ds":
+        tokenizer = AutoTokenizer.from_pretrained(llama_hf_30b)
+        config = OptLlamaForCausalLM.config_class.from_pretrained(llama_hf_30b)
+        config._flash_attn_2_enabled = True
+        config.num_encoders = 0
+        config.num_warmup_layers = 0
+        model = get_ds_model(
+            model_name = llama_hf_30b, 
+            config = config,
+            dtype = torch.bfloat16, 
+            cpu_offload = True,
+            disk_offload = False, 
+            offload_dir = None
+        )
+    elif model == "llama" and size == "30b" and cpu_offload == "ds":
+        tokenizer = AutoTokenizer.from_pretrained(llama_hf_30b)
+        config = AutoConfig.from_pretrained(llama_hf_30b)
+        config._flash_attn_2_enabled = True
+        model = get_ds_model(
+            model_name = llama_hf_30b, 
+            config = config,
+            dtype = torch.bfloat16, 
+            cpu_offload = True,
+            disk_offload = False, 
+            offload_dir = None
         )
 
     print("# of trainable parameters:", get_model_param_count(model, True))
@@ -470,17 +573,17 @@ def main():
     # tokenizer, model = prepare("opt-llama-zero", "1.1b")
     # experiment(tokenizer, model, prompt_text_5, 5+8187, range(640, LARGE_NUM, 32))
 
-    print(">>> llama-7b 512+512 llama")
-    tokenizer, model = prepare("llama", "7b")
-    experiment(tokenizer, model, prompt_text_512, 512+512, 1)
+    # print(">>> llama-7b 512+512 llama")
+    # tokenizer, model = prepare("llama", "7b")
+    # experiment(tokenizer, model, prompt_text_512, 512+512, 1)
 
-    print(">>> llama-7b 512+512 opt-llama")
-    tokenizer, model = prepare("opt-llama", "7b")
-    experiment(tokenizer, model, prompt_text_512, 512+512, 1)
+    # print(">>> llama-7b 512+512 opt-llama")
+    # tokenizer, model = prepare("opt-llama", "7b")
+    # experiment(tokenizer, model, prompt_text_512, 512+512, 1)
 
-    print(">>> llama-7b 512+512 opt-llama-zero")
-    tokenizer, model = prepare("opt-llama-zero", "7b")
-    experiment(tokenizer, model, prompt_text_512, 512+512, 1)
+    # print(">>> llama-7b 512+512 opt-llama-zero")
+    # tokenizer, model = prepare("opt-llama-zero", "7b")
+    # experiment(tokenizer, model, prompt_text_512, 512+512, 1)
 
     # print(">>> llama-7b 512+1024 llama")
     # tokenizer, model = prepare("llama", "7b")
@@ -495,28 +598,28 @@ def main():
     # experiment(tokenizer, model, prompt_text_512, 512+1024, range(16, LARGE_NUM, 16))
 
     # print(">>> llama-30b 512+32 llama")
-    # tokenizer, model = prepare("llama", "30b")
+    # tokenizer, model = prepare("llama", "30b", "hf")
     # experiment(tokenizer, model, prompt_text_512, 512+32, range(2, LARGE_NUM, 2))
 
     # print(">>> llama-30b 512+32 opt-llama")
-    # tokenizer, model = prepare("opt-llama", "30b")
+    # tokenizer, model = prepare("opt-llama", "30b", "hf")
     # experiment(tokenizer, model, prompt_text_512, 512+32, 31)
 
     # print(">>> llama-30b 512+32 opt-llama-zero")
-    # tokenizer, model = prepare("opt-llama-zero", "30b")
+    # tokenizer, model = prepare("opt-llama-zero", "30b", "hf")
     # experiment(tokenizer, model, prompt_text_512, 512+32, 31)
 
     # print(">>> llama-30b 512+1024 llama")
-    # tokenizer, model = prepare("llama", "30b")
+    # tokenizer, model = prepare("llama", "30b", "hf")
     # experiment(tokenizer, model, prompt_text_512, 512+1024, 1)
 
-    # print(">>> llama-30b 512+1024 opt-llama")
-    # tokenizer, model = prepare("opt-llama", "30b")
-    # experiment(tokenizer, model, prompt_text_512, 512+1024, 0)
+    print(">>> llama-30b 512+1024 opt-llama")
+    tokenizer, model = prepare("opt-llama", "30b", "hf")
+    experiment(tokenizer, model, prompt_text_512, 512+1024, 31)
 
-    # print(">>> llama-30b 512+1024 opt-llama-zero")
-    # tokenizer, model = prepare("opt-llama-zero", "30b")
-    # experiment(tokenizer, model, prompt_text_512, 512+1024, 0)
+    print(">>> llama-30b 512+1024 opt-llama-zero")
+    tokenizer, model = prepare("opt-llama-zero", "30b", "hf")
+    experiment(tokenizer, model, prompt_text_512, 512+1024, 31)
 
 
 if __name__ == "__main__":
