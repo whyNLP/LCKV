@@ -84,35 +84,86 @@ class OptLlamaConfig(_LlamaConfig):
 
     def __init__(
         self,
-        train_last_encoder: str = "none",
+        num_trained_encoders: int = 1,
         train_kv: bool = False,
-        num_encoders: int = 1,
-        num_warmup_layers: int = 0,
+        num_encoders: int = 8,
+        layer_types: str = None,
+        target_layer: int = -1,
         **kwargs,
     ):
         """
         Args:
             train_last_encoder (`str`, *optional*, defaults to "none"):
+                Deprecated. Use `num_trained_encoder` instead.
                 Whether to train the last encoder. The value should be one of "none",
                 "encoder" or an integer for the number of encoders to train.
+            num_trained_encoders (`int`, *optional*, defaults to 1):
+                Number of encoders to train. The last `num_trained_encoders` will be
+                trained.
             train_kv (`bool`, *optional*, defaults to False):
                 Whether to train the key-value pair. If set to True, the loss will be
                 added with the MSE loss of the key-value pair in the last layer before
                 and after the decoder. This helps the KV cache to converge so that the
                 training and inference will be consistent, but hurts the performance.
-            num_encoders (`int`, *optional*, defaults to 1):
+            num_encoders (`int`, *optional*, defaults to 8):
                 The number of encoders. x encoders will ensure the starting x tokens in
                 prediction is consistent with training.
             num_warmup_layers (`int`, *optional*, defaults to 0):
+                Deprecated. Use `layer_types` and `target_layer` instead.
                 The number of transformer blocks that will use the key-value pair in the
                 original layers as the kv cache. The rest of the transformer blocks will
                 use the key-value pair in the last layer as the kv cache.
+            layer_types (`str`, *optional*, defaults to ""):
+                The type of each layer. The value should be a comma separated string of
+                integers. The value "0" means the layer will use the key-value pair in
+                the original layers as the kv cache. The value "1" means the layer will
+                use the key-value pair in (possibly) the last layer as the kv cache. 
+                The value "2" means the layer will use the key-value pair during training,
+                but also generate the key-value pair for other layers to use. The default
+                value is all "0".
+            target_layer (`int`, *optional*, defaults to -1):
+                The layer to generate key-value pair. The value should be in 
+                [0, num_hidden_layers). The default value is -1, which means the last layer.
         """
+        # deal with deprecated args
+        if "train_last_encoder" in kwargs:
+            train_last_encoder = kwargs.pop("train_last_encoder")
+            if train_last_encoder == "none":
+                num_trained_encoders = 0
+            elif train_last_encoder == "encoder":
+                num_trained_encoders = 1
+            else:
+                num_trained_encoders = int(train_last_encoder)
+        
+        if "num_warmup_layers" in kwargs:
+            num_warmup_layers = kwargs.pop("num_warmup_layers")
+            num_hidden_layers = kwargs.get("num_hidden_layers")
+            layer_types = ["0"] * num_warmup_layers + ["1"] * (num_hidden_layers - num_warmup_layers - 1) + ["2"]
+            layer_types = "_".join(layer_types)
+            target_layer = num_hidden_layers - 1
+        
         super().__init__(**kwargs)
-        self.train_last_encoder = train_last_encoder
+        self.num_trained_encoders = num_trained_encoders
         self.train_kv = train_kv
         self.num_encoders = num_encoders
-        self.num_warmup_layers = num_warmup_layers
+        self.layer_types = layer_types
+        self.target_layer = target_layer
+
+        if self.layer_types is None:
+            self.layer_types = "_".join(["0"]*self.num_hidden_layers)
+
+        # post check
+        num_hidden_layers = self.num_hidden_layers
+        layer_types = [int(x) for x in self.layer_types.split("_")]
+        if len(layer_types) != num_hidden_layers:
+            raise ValueError("The number of layer types should be equal to the number of hidden layers.")
+        for i in range(num_hidden_layers):
+            if layer_types[i] not in (0, 1, 2):
+                raise ValueError("The layer type should be one of 0, 1 and 2.")
+            if layer_types[i] == 2 and target_layer % num_hidden_layers != i:
+                raise ValueError("The target layer should be the layer of type 2.")
+        if layer_types.count(2) > 1:
+            raise ValueError("Only one layer can be type 2.")
 
 
 class KVLlamaConfig(_LlamaConfig):

@@ -962,20 +962,27 @@ class LlamaDecoderLayer(_LlamaDecoderLayer):
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
     
     def _get_attn_cls(self, config: OptLlamaConfig, layer_idx: int):
+        layer_types = [int(x) for x in config.layer_types.split("_")]
+        layer_type = layer_types[layer_idx]
+
         if not getattr(config, "_flash_attn_2_enabled", False):
-            if layer_idx < config.num_warmup_layers:
+            if layer_type == 0:
                 return LlamaAttentionBase
-            elif layer_idx == config.num_hidden_layers - 1:
+            elif layer_type == 1:
+                return LlamaAttentionMiddle
+            elif layer_type == 2:
                 return LlamaAttention
             else:
-                return LlamaAttentionMiddle
+                raise ValueError(f"Unknwon layer type: {layer_type}")
         else:
-            if layer_idx < config.num_warmup_layers:
+            if layer_type == 0:
                 return LlamaFlashAttention2Base
-            elif layer_idx == config.num_hidden_layers - 1:
+            elif layer_type == 1:
+                return LlamaFlashAttention2Middle
+            elif layer_type == 2:
                 return LlamaFlashAttention2
             else:
-                return LlamaFlashAttention2Middle
+                raise ValueError(f"Unknwon layer type: {layer_type}")
 
     def forward(
         self,
@@ -1140,8 +1147,8 @@ class LlamaModel(_LlamaModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             
-            if use_cache == "last":
-                _use_cache = bool(idx == len(self.layers) - 1)
+            if use_cache == "target":
+                _use_cache = bool(idx == self.config.target_layer % self.config.num_hidden_layers)
             else:
                 _use_cache = use_cache
 
@@ -1173,6 +1180,8 @@ class LlamaModel(_LlamaModel):
 
             if _use_cache:
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
+            elif use_cache == "target":
+                next_decoder_cache += (None,)
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -1319,18 +1328,10 @@ class LlamaForCausalLM(_LlamaForCausalLM):
         bsz, q_len = input_ids.size()
         zero_states = torch.zeros(bsz, self.config.num_key_value_heads, q_len, self.config.hidden_size // self.config.num_attention_heads, device=input_ids.device, dtype=self.dtype)
         encoder_outputs = (zero_states, zero_states)
-
-        # trainable encoders
-        if self.config.train_last_encoder == "encoder":
-            trainable_encoders = 1
-        elif self.config.train_last_encoder == "none":
-            trainable_encoders = 0
-        else:
-            trainable_encoders = int(self.config.train_last_encoder)
         
         for i in range(self.config.num_encoders):
             
-            context = torch.no_grad() if i < self.config.num_encoders - trainable_encoders else dummy_context
+            context = torch.no_grad() if i < self.config.num_encoders - self.config.num_trained_encoders else dummy_context
 
             with context:
                 # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
@@ -1341,13 +1342,13 @@ class LlamaForCausalLM(_LlamaForCausalLM):
                     past_key_values=past_key_values,
                     encoder_outputs=encoder_outputs,
                     inputs_embeds=inputs_embeds,
-                    use_cache="last", # we are using past_key_values to do decoding
+                    use_cache="target", # we are using past_key_values to do decoding
                     output_attentions=output_attentions,
                     output_hidden_states=output_hidden_states,
                     return_dict=True, # we want to retrive the past_key_values
                 )
             
-            encoder_outputs = encoder_outputs.past_key_values[-1]
+            encoder_outputs = encoder_outputs.past_key_values[self.config.target_layer]
             
             # if "old_key_states" not in locals():
             #     old_key_states = encoder_outputs[0]
@@ -1363,7 +1364,7 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             past_key_values=past_key_values,
             encoder_outputs=encoder_outputs,
             inputs_embeds=inputs_embeds,
-            use_cache="last" if self.config.train_kv else False,
+            use_cache="target" if self.config.train_kv else False,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1372,7 +1373,7 @@ class LlamaForCausalLM(_LlamaForCausalLM):
         if self.config.train_kv:
             # the loss to mimic KV and final hidden
             gold_key_state, gold_value_state = encoder_outputs
-            pred_key_state, pred_value_state = outputs[1][-1]
+            pred_key_state, pred_value_state = outputs[1][self.config.target_layer]
             loss_kv = F.mse_loss(pred_key_state, gold_key_state) + F.mse_loss(pred_value_state, gold_value_state)
 
         hidden_states = outputs[0]
@@ -1433,7 +1434,7 @@ class LlamaForCausalLM(_LlamaForCausalLM):
         # since it is too slow, we'll use tqdm by default.
         for i in trange(seq_len, leave=False):
             m_input_ids = input_ids[:, i:i+1]
-            m_attention_mask = attention_mask[:, :i+1]
+            m_attention_mask = attention_mask[:, :i+1] if attention_mask is not None else None
             m_position_ids = position_ids[:, i:i+1] if position_ids is not None else None
             m_inputs_embeds = inputs_embeds[:, i:i+1] if inputs_embeds is not None else None
             
@@ -1592,13 +1593,13 @@ class LlamaForCausalLM(_LlamaForCausalLM):
                 past_key_values=past_key_values,
                 encoder_outputs=encoder_outputs,
                 inputs_embeds=inputs_embeds,
-                use_cache="last", # we are using past_key_values to do decoding
+                use_cache="target", # we are using past_key_values to do decoding
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=True, # we want to retrive the past_key_values
             )
             
-            encoder_outputs = encoder_outputs.past_key_values[-1]
+            encoder_outputs = encoder_outputs.past_key_values[self.config.target_layer]
             
             # if "old_key_states" not in locals():
             #     old_key_states = encoder_outputs[0]
@@ -1622,10 +1623,12 @@ class LlamaForCausalLM(_LlamaForCausalLM):
 
         # manually set the key value
         if use_cache:
-            memory = outputs[1][-1]
-            new_past_key_values = outputs[1]
-            new_past_key_values = new_past_key_values[:self.config.num_warmup_layers] + \
-                (memory, )*(len(new_past_key_values) - self.config.num_warmup_layers)
+            layer_types = [int(x) for x in self.config.layer_types.split("_")]
+            memory = outputs[1][self.config.target_layer]
+            new_past_key_values = tuple(
+                outputs[1][idx] if tp == 0 else memory
+                for idx, tp in enumerate(layer_types)
+            )
             if return_dict:
                 outputs.past_key_values = new_past_key_values
             else:
@@ -1695,10 +1698,12 @@ class LlamaForCausalLM(_LlamaForCausalLM):
 
         # manually set the key value
         if use_cache:
-            memory = outputs[1][-1]
-            new_past_key_values = outputs[1]
-            new_past_key_values = new_past_key_values[:self.config.num_warmup_layers] + \
-                (memory, )*(len(new_past_key_values) - self.config.num_warmup_layers)
+            layer_types = [int(x) for x in self.config.layer_types.split("_")]
+            memory = outputs[1][self.config.target_layer]
+            new_past_key_values = tuple(
+                outputs[1][idx] if tp == 0 else memory
+                for idx, tp in enumerate(layer_types)
+            )
             if return_dict:
                 outputs.past_key_values = new_past_key_values
             else:
