@@ -82,7 +82,7 @@ def load(model_name_or_path, torch_dtype):
 
 args = parse_args()
 
-data = load_dataset(args.dataset_name, args.task, split=args.split, streaming=args.streaming)
+data = load_dataset(args.dataset_name, args.task, split=args.split, streaming=args.download_streaming)
 if args.num_samples is not None:
     data = data.select(range(args.num_samples))
 
@@ -103,7 +103,8 @@ os.makedirs(args.output_dir, exist_ok=True)
 with open(f"{args.output_dir}/log.txt", "w") as f:
 
     num_eval_tokens = 0
-    for text in data["text"]:
+    for item in data:
+        text = item['text']
         encodings = tokenizer(text, return_tensors="pt")
 
         print(encodings.input_ids[:, :10])
