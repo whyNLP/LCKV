@@ -24,7 +24,7 @@ def parse_args():
         "--split", type=str, default="test", choices=["validation", "test"]
     )
     parser.add_argument(
-        "--streaming", action="store_true", help="enable streaming download"
+        "--download_streaming", action="store_true", help="enable streaming download"
     )
 
     parser.add_argument(
