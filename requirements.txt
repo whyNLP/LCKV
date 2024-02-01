@@ -12,3 +12,4 @@ git+https://github.com/Dao-AILab/flash-attention@v2.3.6#subdirectory=csrc/layer_
 flash-attn == 2.3.6
 
 git+https://github.com/EleutherAI/lm-evaluation-harness@v0.4.0
+git+https://github.com/mit-han-lab/streaming-llm

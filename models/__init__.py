@@ -93,3 +93,10 @@ if os.environ.get('ALGPT_FUSED_SWIGLU', False):
     transformers.models.llama.modeling_llama.LlamaMLP = LlamaMLP
     from . import modeling_llama_opt
     modeling_llama_opt.LlamaMLP = LlamaMLP
+
+try:
+    from streaming_llm import enable_streaming_llm
+    from .modeling_llama_opt_streaming import enable_streaming_llm as custom_enable_streaming_llm
+    enable_streaming_llm.enable_streaming_llm = custom_enable_streaming_llm
+except:
+    pass
