@@ -154,6 +154,152 @@ def enable_opt_llama_pos_shift_attention(model):
 
 from streaming_llm.kv_cache import StartRecentKVCache
 
+class OptStartRecentKVCache(StartRecentKVCache):
+    """In our implementation, most of the KV caches are reference pointers.
+    The original implementation of streammingLLM will copy the tensors.
+    """
+    def __call__(self, past_key_values):
+        if past_key_values is None:
+            return None
+        seq_len = past_key_values[0][0].size(self.k_seq_dim)
+        if seq_len <= self.cache_size:
+            return past_key_values
+        
+        # aviod duplicate copy
+        deduplicated_key_values = []
+        indices = []
+        for item in past_key_values:
+            for idx, ref in enumerate(deduplicated_key_values):
+                if item is ref:
+                    indices.append(idx)
+                    break
+            else:
+                indices.append(len(deduplicated_key_values))
+                deduplicated_key_values.append(item)
+        
+        # convert tensors
+        deduplicated_key_values = [
+            [
+                torch.cat(
+                    [
+                        self.k_slice(k, 0, self.start_size),
+                        self.k_slice(k, seq_len - self.recent_size, seq_len),
+                    ],
+                    dim=self.k_seq_dim,
+                ),
+                torch.cat(
+                    [
+                        self.v_slice(v, 0, self.start_size),
+                        self.v_slice(v, seq_len - self.recent_size, seq_len),
+                    ],
+                    dim=self.v_seq_dim,
+                ),
+            ]
+            for k, v in deduplicated_key_values
+        ]
+
+        # restore references
+        return [
+            deduplicated_key_values[idx]
+            for idx in indices
+        ]
+
+    def evict_for_space(self, past_key_values, num_coming):
+        if past_key_values is None:
+            return None
+        seq_len = past_key_values[0][0].size(self.k_seq_dim)
+        if seq_len + num_coming <= self.cache_size:
+            return past_key_values
+        
+        # aviod duplicate copy
+        deduplicated_key_values = []
+        indices = []
+        for item in past_key_values:
+            for idx, ref in enumerate(deduplicated_key_values):
+                if item is ref:
+                    indices.append(idx)
+                    break
+            else:
+                indices.append(len(deduplicated_key_values))
+                deduplicated_key_values.append(item)
+        
+        # convert tensors
+        deduplicated_key_values = [
+            [
+                torch.cat(
+                    [
+                        self.k_slice(k, 0, self.start_size),
+                        self.k_slice(
+                            k, seq_len - self.recent_size + num_coming, seq_len
+                        ),
+                    ],
+                    dim=self.k_seq_dim,
+                ),
+                torch.cat(
+                    [
+                        self.v_slice(v, 0, self.start_size),
+                        self.v_slice(
+                            v, seq_len - self.recent_size + num_coming, seq_len
+                        ),
+                    ],
+                    dim=self.v_seq_dim,
+                ),
+            ]
+            for k, v in deduplicated_key_values
+        ]
+
+        # restore references
+        return [
+            deduplicated_key_values[idx]
+            for idx in indices
+        ]
+
+    def evict_range(self, past_key_values, start, end):
+        if past_key_values is None:
+            return None
+        seq_len = past_key_values[0][0].size(self.k_seq_dim)
+        assert start <= end and end <= seq_len
+
+        # aviod duplicate copy
+        deduplicated_key_values = []
+        indices = []
+        for item in past_key_values:
+            for idx, ref in enumerate(deduplicated_key_values):
+                if item is ref:
+                    indices.append(idx)
+                    break
+            else:
+                indices.append(len(deduplicated_key_values))
+                deduplicated_key_values.append(item)
+        
+        # convert tensors
+        deduplicated_key_values = [
+            [
+                torch.cat(
+                    [
+                        self.k_slice(k, 0, start),
+                        self.k_slice(k, end, seq_len),
+                    ],
+                    dim=self.k_seq_dim,
+                ),
+                torch.cat(
+                    [
+                        self.v_slice(v, 0, start),
+                        self.v_slice(v, end, seq_len),
+                    ],
+                    dim=self.v_seq_dim,
+                ),
+            ]
+            for k, v in deduplicated_key_values
+        ]
+
+        # restore references
+        return [
+            deduplicated_key_values[idx]
+            for idx in indices
+        ]
+
+
 def enable_streaming_llm(model, start_size, recent_size):
     if "opt-llama" in model.config.model_type:
         k_seq_dim = v_seq_dim = 2
@@ -168,7 +314,7 @@ def enable_streaming_llm(model, start_size, recent_size):
         enable_llama_pos_shift_attention(model)
     else:
         raise ValueError(f"got {model.config.model_type}")
-    kv_cache = StartRecentKVCache(
+    kv_cache = OptStartRecentKVCache(
         start_size=start_size,
         recent_size=recent_size,
         k_seq_dim=k_seq_dim,

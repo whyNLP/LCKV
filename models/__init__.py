@@ -82,6 +82,9 @@ if os.environ.get('ALGPT_FUSED_ROTARY', False):
     modeling_llama_opt.apply_rotary_pos_emb = fused_apply_rotary_pos_emb
     modeling_llama_opt.apply_rotary_pos_emb_q = fused_apply_rotary_pos_emb_q
 
+    from . import modeling_llama_opt_streaming
+    modeling_llama_opt_streaming.apply_rotary_pos_emb_q = fused_apply_rotary_pos_emb_q
+
     from . import modeling_llamakv
     modeling_llamakv.apply_rotary_pos_emb_q = fused_apply_rotary_pos_emb_q
 
