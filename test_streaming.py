@@ -56,6 +56,11 @@ def parse_args():
 
 def load(model_name_or_path, torch_dtype):
     print(f"Loading model from {model_name_or_path} ...")
+    # if only model type is specified, load from scratch
+    if ";" in model_name_or_path:
+        from test_latency import prepare
+        tokenizer, model = prepare(*model_name_or_path.split(";"))
+        return model, tokenizer
     # however, tensor parallel for running falcon will occur bugs
     tokenizer = AutoTokenizer.from_pretrained(
         model_name_or_path,

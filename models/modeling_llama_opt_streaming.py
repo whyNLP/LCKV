@@ -301,11 +301,11 @@ class OptStartRecentKVCache(StartRecentKVCache):
 
 
 def enable_streaming_llm(model, start_size, recent_size):
-    if "opt-llama" in model.config.model_type:
+    if "opt-llama" in model.config_class.model_type:
         k_seq_dim = v_seq_dim = 2
 
         enable_opt_llama_pos_shift_attention(model)
-    elif "llama" in model.config.model_type:
+    elif "llama" in model.config_class.model_type:
         k_seq_dim = v_seq_dim = 2
         from streaming_llm.pos_shift.modify_llama import (
             enable_llama_pos_shift_attention,
@@ -313,7 +313,7 @@ def enable_streaming_llm(model, start_size, recent_size):
 
         enable_llama_pos_shift_attention(model)
     else:
-        raise ValueError(f"got {model.config.model_type}")
+        raise ValueError(f"got {model.config_class.model_type}")
     kv_cache = OptStartRecentKVCache(
         start_size=start_size,
         recent_size=recent_size,
