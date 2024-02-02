@@ -101,5 +101,10 @@ try:
     from streaming_llm import enable_streaming_llm
     from .modeling_llama_opt_streaming import enable_streaming_llm as custom_enable_streaming_llm
     enable_streaming_llm.enable_streaming_llm = custom_enable_streaming_llm
+
+    if os.environ.get('ALGPT_FUSED_ROTARY', False):
+        from .llama_fused_rotary import fused_apply_rotary_pos_emb_q
+        from streaming_llm.pos_shift import modify_llama
+        modify_llama.apply_rotary_pos_emb_single = fused_apply_rotary_pos_emb_q
 except:
     pass
