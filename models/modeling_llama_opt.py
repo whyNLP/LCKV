@@ -1147,7 +1147,7 @@ class LlamaModel(_LlamaModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             
-            if use_cache == "target":
+            if use_cache in ("target", "target-only"):
                 _use_cache = bool(idx == self.config.target_layer % self.config.num_hidden_layers)
             else:
                 _use_cache = use_cache
@@ -1177,6 +1177,9 @@ class LlamaModel(_LlamaModel):
                 )
 
             hidden_states = layer_outputs[0]
+
+            if _use_cache and use_cache == "target-only":
+                return layer_outputs[2 if output_attentions else 1]
 
             if _use_cache:
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
@@ -1342,19 +1345,19 @@ class LlamaForCausalLM(_LlamaForCausalLM):
                     past_key_values=past_key_values,
                     encoder_outputs=encoder_outputs,
                     inputs_embeds=inputs_embeds,
-                    use_cache="target", # we are using past_key_values to do decoding
+                    use_cache="target-only", # we are using past_key_values to do decoding
                     output_attentions=output_attentions,
                     output_hidden_states=output_hidden_states,
                     return_dict=True, # we want to retrive the past_key_values
                 )
             
-            encoder_outputs = encoder_outputs.past_key_values[self.config.target_layer]
-            
             # if "old_key_states" not in locals():
             #     old_key_states = encoder_outputs[0]
+            #     old_value_states = encoder_outputs[1]
             # else:
-            #     print(i, F.mse_loss(old_key_states, encoder_outputs[0]))
+            #     print(i, F.mse_loss(old_key_states, encoder_outputs[0])+F.mse_loss(old_value_states, encoder_outputs[1]))
             #     old_key_states = encoder_outputs[0]
+            #     old_value_states = encoder_outputs[1]
             # breakpoint()
 
         outputs = self.model(
@@ -1593,13 +1596,11 @@ class LlamaForCausalLM(_LlamaForCausalLM):
                 past_key_values=past_key_values,
                 encoder_outputs=encoder_outputs,
                 inputs_embeds=inputs_embeds,
-                use_cache="target", # we are using past_key_values to do decoding
+                use_cache="target-only", # we are using past_key_values to do decoding
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=True, # we want to retrive the past_key_values
             )
-            
-            encoder_outputs = encoder_outputs.past_key_values[self.config.target_layer]
             
             # if "old_key_states" not in locals():
             #     old_key_states = encoder_outputs[0]
