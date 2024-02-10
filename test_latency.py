@@ -202,7 +202,7 @@ def prepare(model: str, size: str, cpu_offload: str = "none"):
     tiny_llama = "TinyLlama/TinyLlama-1.1B-intermediate-step-955k-token-2T"
     llama_tiny = "configs/llama/config_tiny.json"
 
-    if model == "opt-llama" and size == "7b":
+    if model == "opt-llama" and size == "7b" and cpu_offload == "none":
         tokenizer = AutoTokenizer.from_pretrained(llama_hf)
         config = OptLlamaForCausalLM.config_class.from_pretrained(llama_hf)
         config._flash_attn_2_enabled = True
@@ -211,7 +211,7 @@ def prepare(model: str, size: str, cpu_offload: str = "none"):
         config.target_layer = -2
         model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
         model.to(distributed_state.device)
-    elif model == "opt-llama-zero" and size == "7b":
+    elif model == "opt-llama-zero" and size == "7b" and cpu_offload == "none":
         tokenizer = AutoTokenizer.from_pretrained(llama_hf)
         config = OptLlamaForCausalLM.config_class.from_pretrained(llama_hf)
         config._flash_attn_2_enabled = True
@@ -220,13 +220,22 @@ def prepare(model: str, size: str, cpu_offload: str = "none"):
         config.target_layer = -1
         model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
         model.to(distributed_state.device)
-    elif model == "llama" and size == "7b":
+    elif model == "opt-llama-10" and size == "7b" and cpu_offload == "none":
+        tokenizer = AutoTokenizer.from_pretrained(llama_hf)
+        config = OptLlamaForCausalLM.config_class.from_pretrained(llama_hf)
+        config._flash_attn_2_enabled = True
+        config.num_encoders = 0
+        config.layer_types = "_".join(["0"]*5+["1"]*(config.num_hidden_layers - 11) + ["2"]+["0"]*5)
+        config.target_layer = -6
+        model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
+        model.to(distributed_state.device)
+    elif model == "llama" and size == "7b" and cpu_offload == "none":
         tokenizer = AutoTokenizer.from_pretrained(llama_hf)
         config = AutoConfig.from_pretrained(llama_hf)
         config._flash_attn_2_enabled = True
         model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
         model.to(distributed_state.device)
-    elif model == "opt-llama" and size == "1.1b":
+    elif model == "opt-llama" and size == "1.1b" and cpu_offload == "none":
         tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
         config = OptLlamaForCausalLM.config_class.from_pretrained(tiny_llama)
         config._flash_attn_2_enabled = True
@@ -235,7 +244,7 @@ def prepare(model: str, size: str, cpu_offload: str = "none"):
         config.target_layer = -2
         model = OptLlamaForCausalLM.from_pretrained(tiny_llama, config=config, torch_dtype=torch.bfloat16)
         model.to(distributed_state.device)
-    elif model == "opt-llama-zero" and size == "1.1b":
+    elif model == "opt-llama-zero" and size == "1.1b" and cpu_offload == "none":
         tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
         config = OptLlamaForCausalLM.config_class.from_pretrained(tiny_llama)
         config._flash_attn_2_enabled = True
@@ -244,13 +253,22 @@ def prepare(model: str, size: str, cpu_offload: str = "none"):
         config.target_layer = -1
         model = OptLlamaForCausalLM.from_pretrained(tiny_llama, config=config, torch_dtype=torch.bfloat16)
         model.to(distributed_state.device)
-    elif model == "llama" and size == "1.1b":
+    elif model == "opt-llama-10" and size == "1.1b" and cpu_offload == "none":
+        tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
+        config = OptLlamaForCausalLM.config_class.from_pretrained(tiny_llama)
+        config._flash_attn_2_enabled = True
+        config.num_encoders = 0
+        config.layer_types = "_".join(["0"]*5+["1"]*(config.num_hidden_layers - 11) + ["2"]+["0"]*5)
+        config.target_layer = -6
+        model = OptLlamaForCausalLM.from_pretrained(tiny_llama, config=config, torch_dtype=torch.bfloat16)
+        model.to(distributed_state.device)
+    elif model == "llama" and size == "1.1b" and cpu_offload == "none":
         tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
         config = AutoConfig.from_pretrained(tiny_llama)
         config._flash_attn_2_enabled = True
         model = AutoModelForCausalLM.from_pretrained(tiny_llama, config=config, torch_dtype=torch.bfloat16)
         model.to(distributed_state.device)
-    elif model == "opt-llama" and size == "50M":
+    elif model == "opt-llama" and size == "50M" and cpu_offload == "none":
         tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
         config = OptLlamaForCausalLM.config_class.from_pretrained(llama_tiny)
         config._flash_attn_2_enabled = True
@@ -259,7 +277,7 @@ def prepare(model: str, size: str, cpu_offload: str = "none"):
         config.target_layer = -2
         model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
         model.to(distributed_state.device)
-    elif model == "opt-llama-zero" and size == "50M":
+    elif model == "opt-llama-zero" and size == "50M" and cpu_offload == "none":
         tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
         config = OptLlamaForCausalLM.config_class.from_pretrained(llama_tiny)
         config._flash_attn_2_enabled = True
@@ -268,7 +286,7 @@ def prepare(model: str, size: str, cpu_offload: str = "none"):
         config.target_layer = -1
         model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
         model.to(distributed_state.device)
-    elif model == "llama" and size == "50M":
+    elif model == "llama" and size == "50M" and cpu_offload == "none":
         tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
         config = AutoConfig.from_pretrained(llama_tiny)
         config._flash_attn_2_enabled = True
@@ -290,6 +308,14 @@ def prepare(model: str, size: str, cpu_offload: str = "none"):
         config.num_encoders = 0
         config.layer_types = "_".join(["1"]*(config.num_hidden_layers - 1) + ["2"])
         config.target_layer = -1
+        model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
+    elif model == "opt-llama-zero" and size == "30b" and cpu_offload == "none":
+        tokenizer = AutoTokenizer.from_pretrained(llama_hf_30b)
+        config = OptLlamaForCausalLM.config_class.from_pretrained(llama_hf_30b)
+        config._flash_attn_2_enabled = True
+        config.num_encoders = 0
+        config.layer_types = "_".join(["0"]*5+["1"]*(config.num_hidden_layers - 11) + ["2"]+["0"]*5)
+        config.target_layer = -6
         model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
         model.to(distributed_state.device)
     elif model == "llama" and size == "30b" and cpu_offload == "none":
@@ -321,6 +347,22 @@ def prepare(model: str, size: str, cpu_offload: str = "none"):
         config.num_encoders = 0
         config.layer_types = "_".join(["1"]*(config.num_hidden_layers - 1) + ["2"])
         config.target_layer = -1
+        model = get_hf_model(
+            model_name = llama_hf_30b, 
+            config = config,
+            dtype = torch.bfloat16, 
+            cpu_offload = True,
+            disk_offload = False, 
+            offload_dir = None, 
+            num_gpus = 1
+        )
+    elif model == "opt-llama-10" and size == "30b" and cpu_offload == "hf":
+        tokenizer = AutoTokenizer.from_pretrained(llama_hf_30b)
+        config = OptLlamaForCausalLM.config_class.from_pretrained(llama_hf_30b)
+        config._flash_attn_2_enabled = True
+        config.num_encoders = 0
+        config.layer_types = "_".join(["0"]*5+["1"]*(config.num_hidden_layers - 11) + ["2"]+["0"]*5)
+        config.target_layer = -6
         model = get_hf_model(
             model_name = llama_hf_30b, 
             config = config,
@@ -630,9 +672,12 @@ def experiment(tokenizer, model, prompt, max_length, iterator, verbose=False):
             # print the current date and time
             try:
                 start, mid, end = run(i)
-                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}] bsz: {i:3}, time: {end-start:.3f} = {mid-start:.3f} + {end-mid:.3f}")
+                length = max_length - input_ids.shape[-1]
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}] bsz: {i:3}, time: {end-start:.3f} = {mid-start:.3f} + {end-mid:.3f}, throughput: {i*length/(end-start):.3f} tokens/s")
             except Exception as e:
-                print(e)
+                if not str(e).startswith("CUDA out of memory."):
+                    print(e)
+                    raise
                 return
     
     else:
@@ -641,11 +686,14 @@ def experiment(tokenizer, model, prompt, max_length, iterator, verbose=False):
         for i in iterator:
             try:
                 start, mid, end = run(i)
-                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}] bsz: {i:3}, time: {end-start:.3f} = {mid-start:.3f} + {end-mid:.3f}")
+                length = max_length - input_ids.shape[-1]
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}] bsz: {i:3}, time: {end-start:.3f} = {mid-start:.3f} + {end-mid:.3f}, throughput: {i*length/(end-start):.3f} tokens/s")
                 iterator.report(i, True)
             except Exception as e:
                 print(f"[{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}] bsz: {i:3}, FAIL")
-                print(e)
+                if not str(e).startswith("CUDA out of memory."):
+                    print(e)
+                    raise
                 iterator.report(i, False)
         return iterator.nxt
 
@@ -665,6 +713,54 @@ def main():
     # print(">>> tiny-llama 5+8187 opt-llama-zero")
     # tokenizer, model = prepare("opt-llama-zero", "1.1b")
     # experiment(tokenizer, model, prompt_text_5, 5+8187, 1)
+
+    # print(">>> tiny-llama 5+8187 opt-llama-10")
+    # tokenizer, model = prepare("opt-llama-10", "1.1b")
+    # experiment(tokenizer, model, prompt_text_5, 5+8187, 1)
+
+    # print(">>> tiny-llama 512+32 llama")
+    # tokenizer, model = prepare("llama", "1.1b")
+    # experiment(tokenizer, model, prompt_text_512, 512+32, 155)
+
+    # print(">>> tiny-llama 512+32 opt-llama")
+    # tokenizer, model = prepare("opt-llama", "1.1b")
+    # experiment(tokenizer, model, prompt_text_512, 512+32, 511)
+
+    # print(">>> tiny-llama 512+512 llama")
+    # tokenizer, model = prepare("llama", "1.1b")
+    # experiment(tokenizer, model, prompt_text_512, 512+512, 1)
+
+    # print(">>> tiny-llama 512+512 opt-llama")
+    # tokenizer, model = prepare("opt-llama", "1.1b")
+    # experiment(tokenizer, model, prompt_text_512, 512+512, 1)
+
+    # print(">>> tiny-llama 512+1024 llama")
+    # tokenizer, model = prepare("llama", "1.1b")
+    # experiment(tokenizer, model, prompt_text_512, 512+1024, 1)
+
+    # print(">>> tiny-llama 512+1024 opt-llama")
+    # tokenizer, model = prepare("opt-llama", "1.1b")
+    # experiment(tokenizer, model, prompt_text_512, 512+1024, 1)
+
+    # print(">>> tiny-llama 5+2043 llama")
+    # tokenizer, model = prepare("llama", "1.1b")
+    # experiment(tokenizer, model, prompt_text_5, 5+2043, 1)
+
+    # print(">>> tiny-llama 5+2043 opt-llama")
+    # tokenizer, model = prepare("opt-llama", "1.1b")
+    # experiment(tokenizer, model, prompt_text_5, 5+2043, 1)
+    
+    # print(">>> tiny-llama 5+2043 opt-llama-10")
+    # tokenizer, model = prepare("opt-llama-10", "1.1b")
+    # experiment(tokenizer, model, prompt_text_5, 5+2043, 1)
+
+    # print(">>> llama-7b 5+2043 llama")
+    # tokenizer, model = prepare("llama", "7b")
+    # experiment(tokenizer, model, prompt_text_5, 5+2043, 1)
+
+    # print(">>> llama-7b 5+2043 opt-llama")
+    # tokenizer, model = prepare("opt-llama", "7b")
+    # experiment(tokenizer, model, prompt_text_5, 5+2043, 1)
 
     # print(">>> llama-7b 512+512 llama")
     # tokenizer, model = prepare("llama", "7b")
