@@ -115,7 +115,7 @@ with open(f"{args.output_dir}/log.txt", "w") as f:
         print(encodings.input_ids[:, :10])
 
         seq_len = encodings.input_ids.size(1)
-        print(f"seq_len: {seq_len}")
+        print(f"num_eval_tokens: {num_eval_tokens}, seq_len: {seq_len}")
         pbar = tqdm(range(0, seq_len - 1))
         
         # import time
