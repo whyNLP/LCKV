@@ -1066,6 +1066,18 @@ class LlamaModel(_LlamaModel):
         self.layers = nn.ModuleList([LlamaDecoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+        # remember the first hidden cache layer
+        layer_types = [int(x) for x in config.layer_types.split("_")]
+        self.hidden_cache_layer = -1
+        for i, layer_type in enumerate(layer_types):
+            if layer_type == 0:
+                self.hidden_cache_layer = i
+            else:
+                break
+        target_layer = config.target_layer % config.num_hidden_layers
+        if self.hidden_cache_layer >= target_layer: # though we do not recommend this, we allow it
+            self.hidden_cache_layer = target_layer - 1
+
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
@@ -1084,6 +1096,24 @@ class LlamaModel(_LlamaModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
+        """
+        Args:
+            encoder_outputs: A tuple of (first_hidden_cache, last_key_value_cache)
+                first_hidden_cache: 
+                    - torch.FloatTensor of shape (batch_size, seq_len, hidden_size)
+                    The last layer at the bottom that follows the standard transformer architecture. For example,
+                    if the first 3 layers are standard transformer layers, then this tensor will be the output
+                    of the 3rd layer.
+                    - List[torch.FloatTensor] of tuple of torch.FloatTensor of shape (batch_size, num_heads, seq_len, head_dim)
+                    The kv cache of the first few layers.
+                last_key_value_cache: a tuple of torch.FloatTensor of shape (batch_size, num_heads, seq_len, head_dim)
+                    The kv cache of the target layer.
+            use_cache: `Optional[bool]`:
+                When it is a boolean, the behavior is the same as that of the original transformers library codes.
+                When it is "target", only cache the target layer.
+                When it is "target-only", only cache the target layer and return the cache.
+                When it is "head-only", only cache the hidden states and return the cache.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1142,6 +1172,13 @@ class LlamaModel(_LlamaModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
+        first_hidden_cache, last_key_value_cache = encoder_outputs if encoder_outputs is not None else (None, None)
+
+        if use_cache == "head-only":
+            if first_hidden_cache is not None:
+                raise ValueError("The first hidden cache is not None. Please set `use_cache` to `target` or `target-only` or a boolean value.")
+            if self.hidden_cache_layer == -1:
+                return hidden_states, last_key_value_cache
 
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -1149,8 +1186,24 @@ class LlamaModel(_LlamaModel):
             
             if use_cache in ("target", "target-only"):
                 _use_cache = bool(idx == self.config.target_layer % self.config.num_hidden_layers)
+            elif use_cache == "head-only":
+                _use_cache = True
             else:
                 _use_cache = use_cache
+            
+            # check the first hidden cache
+            if first_hidden_cache is not None and idx <= self.hidden_cache_layer:
+                if idx == self.hidden_cache_layer:
+                    hidden_states = first_hidden_cache[0]
+                if use_cache == "head-only":
+                    return first_hidden_cache, last_key_value_cache
+                if _use_cache and use_cache == "target-only":
+                    return first_hidden_cache, last_key_value_cache
+                elif _use_cache:
+                    next_decoder_cache += (first_hidden_cache[1][idx],)
+                if output_attentions:
+                    all_self_attns += (None,)
+                continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
@@ -1161,7 +1214,7 @@ class LlamaModel(_LlamaModel):
                     attention_mask,
                     position_ids,
                     past_key_value,
-                    encoder_outputs,
+                    last_key_value_cache,
                     output_attentions,
                     _use_cache,
                 )
@@ -1171,7 +1224,7 @@ class LlamaModel(_LlamaModel):
                     attention_mask=attention_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_value,
-                    encoder_outputs=encoder_outputs,
+                    encoder_outputs=last_key_value_cache,
                     output_attentions=output_attentions,
                     use_cache=_use_cache,
                 )
@@ -1179,12 +1232,16 @@ class LlamaModel(_LlamaModel):
             hidden_states = layer_outputs[0]
 
             if _use_cache and use_cache == "target-only":
-                return layer_outputs[2 if output_attentions else 1]
+                return first_hidden_cache, layer_outputs[2 if output_attentions else 1]
 
             if _use_cache:
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
             elif use_cache == "target":
                 next_decoder_cache += (None,)
+
+            # we need to update the kv cache first, then return the cache of hidden states
+            if idx == self.hidden_cache_layer and use_cache == "head-only":
+                return (hidden_states, next_decoder_cache), last_key_value_cache
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -1330,7 +1387,21 @@ class LlamaForCausalLM(_LlamaForCausalLM):
         # initialize kv w/ zero
         bsz, q_len = input_ids.size()
         zero_states = torch.zeros(bsz, self.config.num_key_value_heads, q_len, self.config.hidden_size // self.config.num_attention_heads, device=input_ids.device, dtype=self.dtype)
-        encoder_outputs = (zero_states, zero_states)
+        encoder_outputs = (None, (zero_states, zero_states))
+
+        # pre-compute hidden states cache
+        encoder_outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            encoder_outputs=encoder_outputs,
+            inputs_embeds=inputs_embeds,
+            use_cache="head-only",
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True, # we want to retrive the past_key_values
+        )
         
         for i in range(self.config.num_encoders):
             
@@ -1375,7 +1446,7 @@ class LlamaForCausalLM(_LlamaForCausalLM):
         
         if self.config.train_kv:
             # the loss to mimic KV and final hidden
-            gold_key_state, gold_value_state = encoder_outputs
+            gold_key_state, gold_value_state = encoder_outputs[1]
             pred_key_state, pred_value_state = outputs[1][self.config.target_layer]
             loss_kv = F.mse_loss(pred_key_state, gold_key_state) + F.mse_loss(pred_value_state, gold_value_state)
 
@@ -1584,7 +1655,21 @@ class LlamaForCausalLM(_LlamaForCausalLM):
         # initialize kv w/ zero
         bsz, q_len = input_ids.size()
         zero_states = torch.zeros(bsz, self.config.num_key_value_heads, q_len, self.config.hidden_size // self.config.num_attention_heads, device=input_ids.device, dtype=self.dtype)
-        encoder_outputs = (zero_states, zero_states)
+        encoder_outputs = (None, (zero_states, zero_states))
+
+        # pre-compute hidden states cache
+        encoder_outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            encoder_outputs=encoder_outputs,
+            inputs_embeds=inputs_embeds,
+            use_cache="head-only",
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True, # we want to retrive the past_key_values
+        )
         
         for i in range(self.config.num_encoders):
             
