@@ -23,6 +23,10 @@ import time
 from tqdm import tqdm
 set_seed(42)
 
+def empty_cache():
+    for _ in range(10):
+        torch.cuda.empty_cache()
+
 class BinarySearch:
     """
     Binary Search w/o maximum limit, search the upper bound by doubling the index.
@@ -262,6 +266,16 @@ def prepare(model: str, size: str, cpu_offload: str = "none"):
         config.target_layer = -6
         model = OptLlamaForCausalLM.from_pretrained(tiny_llama, config=config, torch_dtype=torch.bfloat16)
         model.to(distributed_state.device)
+    elif model.startswith("opt-llama-") and size == "1.1b" and cpu_offload == "none":
+        warmup = int(model.split("-")[-1])
+        tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
+        config = OptLlamaForCausalLM.config_class.from_pretrained(tiny_llama)
+        config._flash_attn_2_enabled = True
+        config.num_encoders = 8
+        config.layer_types = "_".join(["0"]*(warmup//2)+["1"]*(config.num_hidden_layers - warmup - 1) + ["2"]+["0"]*(warmup//2))
+        config.target_layer = -(warmup//2 + 1)
+        model = OptLlamaForCausalLM.from_pretrained(tiny_llama, config=config, torch_dtype=torch.bfloat16)
+        model.to(distributed_state.device)
     elif model == "llama" and size == "1.1b" and cpu_offload == "none":
         tokenizer = AutoTokenizer.from_pretrained(tiny_llama)
         config = AutoConfig.from_pretrained(tiny_llama)
@@ -309,7 +323,7 @@ def prepare(model: str, size: str, cpu_offload: str = "none"):
         config.layer_types = "_".join(["1"]*(config.num_hidden_layers - 1) + ["2"])
         config.target_layer = -1
         model = AutoModelForCausalLM.from_config(config=config, torch_dtype=torch.bfloat16)
-    elif model == "opt-llama-zero" and size == "30b" and cpu_offload == "none":
+    elif model == "opt-llama-10" and size == "30b" and cpu_offload == "none":
         tokenizer = AutoTokenizer.from_pretrained(llama_hf_30b)
         config = OptLlamaForCausalLM.config_class.from_pretrained(llama_hf_30b)
         config._flash_attn_2_enabled = True
@@ -679,6 +693,7 @@ def experiment(tokenizer, model, prompt, max_length, iterator, verbose=False):
                     print(e)
                     raise
                 return
+            empty_cache()
     
     else:
 
@@ -695,120 +710,23 @@ def experiment(tokenizer, model, prompt, max_length, iterator, verbose=False):
                     print(e)
                     raise
                 iterator.report(i, False)
+            empty_cache()
         return iterator.nxt
 
 
 def main():
 
-    pass
+    print(">>> llama-7b 2048+2048 llama")
+    tokenizer, model = prepare("llama", "7b")
+    experiment(tokenizer, model, prompt_text_2048, 2048+2048, 1)
 
-    # print(">>> tiny-llama 5+8187 llama")
-    # tokenizer, model = prepare("llama", "1.1b")
-    # experiment(tokenizer, model, prompt_text_5, 5+8187, 1)
+    print(">>> llama-7b 2048+2048 opt-llama")
+    tokenizer, model = prepare("opt-llama", "7b")
+    experiment(tokenizer, model, prompt_text_2048, 2048+2048, 1)
 
-    # print(">>> tiny-llama 5+8187 opt-llama")
-    # tokenizer, model = prepare("opt-llama", "1.1b")
-    # experiment(tokenizer, model, prompt_text_5, 5+8187, 1)
-
-    # print(">>> tiny-llama 5+8187 opt-llama-zero")
-    # tokenizer, model = prepare("opt-llama-zero", "1.1b")
-    # experiment(tokenizer, model, prompt_text_5, 5+8187, 1)
-
-    # print(">>> tiny-llama 5+8187 opt-llama-10")
-    # tokenizer, model = prepare("opt-llama-10", "1.1b")
-    # experiment(tokenizer, model, prompt_text_5, 5+8187, 1)
-
-    # print(">>> tiny-llama 512+32 llama")
-    # tokenizer, model = prepare("llama", "1.1b")
-    # experiment(tokenizer, model, prompt_text_512, 512+32, 155)
-
-    # print(">>> tiny-llama 512+32 opt-llama")
-    # tokenizer, model = prepare("opt-llama", "1.1b")
-    # experiment(tokenizer, model, prompt_text_512, 512+32, 511)
-
-    # print(">>> tiny-llama 512+512 llama")
-    # tokenizer, model = prepare("llama", "1.1b")
-    # experiment(tokenizer, model, prompt_text_512, 512+512, 1)
-
-    # print(">>> tiny-llama 512+512 opt-llama")
-    # tokenizer, model = prepare("opt-llama", "1.1b")
-    # experiment(tokenizer, model, prompt_text_512, 512+512, 1)
-
-    # print(">>> tiny-llama 512+1024 llama")
-    # tokenizer, model = prepare("llama", "1.1b")
-    # experiment(tokenizer, model, prompt_text_512, 512+1024, 1)
-
-    # print(">>> tiny-llama 512+1024 opt-llama")
-    # tokenizer, model = prepare("opt-llama", "1.1b")
-    # experiment(tokenizer, model, prompt_text_512, 512+1024, 1)
-
-    # print(">>> tiny-llama 5+2043 llama")
-    # tokenizer, model = prepare("llama", "1.1b")
-    # experiment(tokenizer, model, prompt_text_5, 5+2043, 1)
-
-    # print(">>> tiny-llama 5+2043 opt-llama")
-    # tokenizer, model = prepare("opt-llama", "1.1b")
-    # experiment(tokenizer, model, prompt_text_5, 5+2043, 1)
-    
-    # print(">>> tiny-llama 5+2043 opt-llama-10")
-    # tokenizer, model = prepare("opt-llama-10", "1.1b")
-    # experiment(tokenizer, model, prompt_text_5, 5+2043, 1)
-
-    # print(">>> llama-7b 5+2043 llama")
-    # tokenizer, model = prepare("llama", "7b")
-    # experiment(tokenizer, model, prompt_text_5, 5+2043, 1)
-
-    # print(">>> llama-7b 5+2043 opt-llama")
-    # tokenizer, model = prepare("opt-llama", "7b")
-    # experiment(tokenizer, model, prompt_text_5, 5+2043, 1)
-
-    # print(">>> llama-7b 512+512 llama")
-    # tokenizer, model = prepare("llama", "7b")
-    # experiment(tokenizer, model, prompt_text_512, 512+512, 1)
-
-    # print(">>> llama-7b 512+512 opt-llama")
-    # tokenizer, model = prepare("opt-llama", "7b")
-    # experiment(tokenizer, model, prompt_text_512, 512+512, 1)
-
-    # print(">>> llama-7b 512+512 opt-llama-zero")
-    # tokenizer, model = prepare("opt-llama-zero", "7b")
-    # experiment(tokenizer, model, prompt_text_512, 512+512, 1)
-
-    # print(">>> llama-7b 512+1024 llama")
-    # tokenizer, model = prepare("llama", "7b")
-    # experiment(tokenizer, model, prompt_text_512, 512+1024, 1)
-
-    # print(">>> llama-7b 512+1024 opt-llama")
-    # tokenizer, model = prepare("opt-llama", "7b")
-    # experiment(tokenizer, model, prompt_text_512, 512+1024, 1)
-
-    # print(">>> llama-7b 512+1024 opt-llama-zero")
-    # tokenizer, model = prepare("opt-llama-zero", "7b")
-    # experiment(tokenizer, model, prompt_text_512, 512+1024, 1)
-
-    # print(">>> llama-30b 512+32 llama")
-    # tokenizer, model = prepare("llama", "30b", "hf")
-    # experiment(tokenizer, model, prompt_text_512, 512+32, 1)
-
-    # print(">>> llama-30b 512+32 opt-llama")
-    # tokenizer, model = prepare("opt-llama", "30b", "hf")
-    # experiment(tokenizer, model, prompt_text_512, 512+32, 31)
-
-    # print(">>> llama-30b 512+32 opt-llama-zero")
-    # tokenizer, model = prepare("opt-llama-zero", "30b", "hf")
-    # experiment(tokenizer, model, prompt_text_512, 512+32, 31)
-
-    # print(">>> llama-30b 512+1024 llama")
-    # tokenizer, model = prepare("llama", "30b", "hf")
-    # experiment(tokenizer, model, prompt_text_512, 512+1024, 1)
-
-    # print(">>> llama-30b 512+1024 opt-llama")
-    # tokenizer, model = prepare("opt-llama", "30b", "hf")
-    # experiment(tokenizer, model, prompt_text_512, 512+1024, 83)
-
-    # print(">>> llama-30b 512+1024 opt-llama-zero")
-    # tokenizer, model = prepare("opt-llama-zero", "30b", "hf")
-    # experiment(tokenizer, model, prompt_text_512, 512+1024, 83)
+    print(">>> llama-7b 2048+2048 opt-llama-10")
+    tokenizer, model = prepare("opt-llama-10", "7b")
+    experiment(tokenizer, model, prompt_text_2048, 2048+2048, 1)
 
 
 
