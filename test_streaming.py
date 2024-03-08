@@ -117,8 +117,12 @@ with open(f"{args.output_dir}/log.txt", "w") as f:
         seq_len = encodings.input_ids.size(1)
         print(f"seq_len: {seq_len}")
         pbar = tqdm(range(0, seq_len - 1))
-
+        
+        # import time
         for idx in pbar:
+            # if idx == args.start_size + args.recent_size:
+            #     print("Starting timer...")
+            #     start = time.time()
             input_ids = encodings.input_ids[:, idx : idx + 1].to(device)
             with torch.no_grad():
                 outputs = model(
@@ -139,6 +143,7 @@ with open(f"{args.output_dir}/log.txt", "w") as f:
             print(neg_log_likelihood.item(), file=f, flush=True)
             num_eval_tokens += 1
             if args.num_eval_tokens is not None and num_eval_tokens >= args.num_eval_tokens:
+                # print(f"time: {time.time() - start:.2f}")
                 break
         if args.num_eval_tokens is not None and num_eval_tokens >= args.num_eval_tokens:
             break
