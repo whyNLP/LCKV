@@ -13,13 +13,20 @@ lm_eval.tasks.initialize_tasks() # register all tasks from the `lm_eval/tasks` s
 
 results = lm_eval.simple_evaluate( # call simple_evaluate
     model="hf",
-    # model_args="pretrained=outputs/llama-tiny-original-test,dtype=bfloat16",
-    model_args="pretrained=/tmp/test-clm-opt-8-7-l1,dtype=bfloat16",
-    tasks=["mathqa"],
+    model_args="pretrained=TinyLlama/TinyLlama-1.1B-intermediate-step-1195k-token-2.5T,dtype=bfloat16",
+    tasks=[
+        "hellaswag",
+        "openbookqa",
+        "winogrande",
+        "arc_challenge",
+        "arc_easy",
+        "boolq",
+        "piqa",
+    ],
     num_fewshot=0,
     log_samples=False,
 )
 
-with open("result.json", "w") as f:
+with open("harness/result-ref-2.5T.json", "w") as f:
     import json
     json.dump(results, f, indent=4)
