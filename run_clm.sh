@@ -106,35 +106,36 @@ export ALGPT_FLASH_ATTN=1
 #     --run_name gpt2-tiny \
 #     --output_dir /tmp/test-clm-$RANDOM-`date +"%m-%d--%H-%M-%S"`
 
-# # algpt2 deepspeed
-# deepspeed --master_port $MASTER_PORT run_clm.py \
-#     --deepspeed ds_config.json \
-#     --model_type algpt2 \
-#     --config_name configs/algpt/config_tiny.json \
-#     --config_overrides n_layer=8 \
-#     --tokenizer_name gpt2 \
-#     --dataset_name wikitext \
-#     --dataset_config_name wikitext-103-raw-v1 \
-#     --per_device_train_batch_size 32 \
-#     --per_device_eval_batch_size 32 \
-#     --lr_scheduler_type cosine \
-#     --warmup_ratio 0.02 \
-#     --learning_rate 2e-3 \
-#     --weight_decay 1e-5 \
-#     --bf16 \
-#     --do_train \
-#     --do_eval \
-#     --do_predict \
-#     --num_train_epochs 30 \
-#     --save_total_limit 3 \
-#     --save_strategy epoch \
-#     --evaluation_strategy epoch \
-#     --load_best_model_at_end True \
-#     --metric_for_best_model eval_loss \
-#     --report_to wandb \
-#     --run_name algpt2-nlayer8 \
-#     --output_dir /tmp/test-clm-$RANDOM-`date +"%m-%d--%H-%M-%S"`
-#     # --output_dir /home/wuhy/projects/algpt/ALGPT/outputs/algpt2-nlayer8
+# algpt2 deepspeed
+deepspeed --master_port $MASTER_PORT run_clm.py \
+    --deepspeed ds_config.json \
+    --model_type algpt2 \
+    --config_name configs/algpt/config_tiny.json \
+    --config_overrides loss_layers=0_1_2_3_4_5_6_7,loss_weights=0.125_0.25_0.375_0.5_0.625_0.75_0.875_1,n_layer=8,use_sweet=false,share_head=true,attn_pdrop=0.05,embd_pdrop=0.0,resid_pdrop=0.05,use_fixed_dropout=true \
+    --tokenizer_name gpt2 \
+    --dataset_name wikitext \
+    --dataset_config_name wikitext-103-raw-v1 \
+    --per_device_train_batch_size 4 \
+    --per_device_eval_batch_size 4 \
+    --gradient_accumulation_steps 1 \
+    --lr_scheduler_type cosine \
+    --warmup_ratio 0.015 \
+    --learning_rate 9.5e-4 \
+    --weight_decay 6.6e-6 \
+    --bf16 \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --num_train_epochs 30 \
+    --save_total_limit 3 \
+    --save_strategy epoch \
+    --evaluation_strategy epoch \
+    --load_best_model_at_end True \
+    --metric_for_best_model eval_loss \
+    --report_to none \
+    --run_name algpt2-8losses-sm-v4 \
+    --output_dir /tmp/test-clm-$RANDOM-`date +"%m-%d--%H-%M-%S"`
+    # --output_dir outputs/algpt2-8losses-sm-v4
 
 # # cyclegpt2 deepspeed
 # deepspeed --master_port $MASTER_PORT run_clm.py \
