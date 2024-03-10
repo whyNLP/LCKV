@@ -28,3 +28,21 @@ Solution:
 pip uninstall flash-attn
 FLASH_ATTENTION_FORCE_BUILD=TRUE pip install flash-attn
 ```
+
+### CUDA version
+
+The cuda version may affect the installation of:
+- PyTorch
+- Flash-Attn
+- XFormers
+
+Please make sure to install the correct version of the packages (so long as they are consistent, the code would work). Also make sure that `nvcc` is installed and available in the path.
+
+Our environment is set to `CUDA 12.1` and you may install with
+```sh
+conda install pytorch==2.1.0 pytorch-cuda=12.1 -c pytorch -c nvidia
+pip install xformers==0.0.22.post7 --index-url https://download.pytorch.org/whl/cu121
+pip install -r requirements.txt
+```
+
+
