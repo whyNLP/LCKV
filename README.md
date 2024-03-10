@@ -1,6 +1,19 @@
 # Layer-Condensed KV Cache
 
-Layer-Condensed KV cache w/ 10 times larger batch size, fewer params and less computation. Dramatic speed up with better task performance. Submitted to ACL 2024.
+<div align="center">
+<img width="200" src="https://github.com/whyNLP/LCKV/assets/43395692/de271239-0096-4fd7-a578-59e57db916a2" />
+<p>
+  The KVs of the top layer
+  <br>
+  are the most informative and important.
+  <br>
+  So why bother caching the rest?
+</p>
+</div>
+
+The code base for project **Layer-Condensed KV Cache**, a new variant of transformer decoders in which queries of all layers are paired with keys and values of just the top layer. It reduces the memory and computation cost, reduces the number of parameters, significantly improves the inference throughput with comparable or better task performance. The paper "[Layer-Condensed KV Cache for Efficient Inference of Large Language Models](https://faculty.sist.shanghaitech.edu.cn/faculty/tukw/)" is submitted to ACL 2024.
+
+This work is inspired by [Probabilistic Transformer](https://github.com/whyNLP/Probabilistic-Transformer), where we consider the stacking layer structure of a transformer as an iterative process of improving token representation.
 
 ## Installation
 
