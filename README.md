@@ -1,6 +1,6 @@
-# ALGPT
+# Layer-Condensed KV Cache
 
-A variation of ALBERT that applies to GPT-2, with few parameters, fast inference and many interesting features. Working in progress.
+Layer-Condensed KV cache w/ 10 times larger batch size, fewer params and less computation. Dramatic speed up with better task performance. Submitted to ACL 2024.
 
 ## Installation
 
