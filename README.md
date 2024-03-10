@@ -62,6 +62,16 @@ export LCKV_FUSED_SWIGLU=1
 
 We've done this for you in the provided training scripts. You may also refer to my [tinyllama](https://github.com/whyNLP/tinyllama) repo for a pure PyTorch implementation for the Llama model.
 
+### Configuration
+
+We provide some sample configuration files in the  `configs` folder. The config settings are defined in [models/configuration_llama.py](models/configuration_llama.py). You may refer to this file for more details.
+
+Notice that some of the settings have different names and meanings compared to that in our paper. The following figure explains the correspondence:
+
+<div align="center">
+<img width="500" src="https://github.com/whyNLP/LCKV/assets/43395692/74671862-146f-492c-8d17-d0e6a7697170" />
+</div>
+
 ### Training
 
 We use the same [training script](https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_clm.py) as the original `transformers` library. You may refer to the [official documentation](https://huggingface.co/transformers/training.html) for more details.

@@ -22,9 +22,9 @@
     "transformers_version": "4.31.0.dev0",
     "use_cache": true,
     "vocab_size": 32000,
-    "train_encoder": true,
-    "num_encoders": 1,
-    "num_warmup_layers": 0,
-    "kv_pattern": "use_kv",
-    "mask_diagonal": false
+    "num_trained_encoders": 1,
+    "num_encoders": 8,
+    "train_kv": false,
+    "layer_types": "0_1_1_1_1_1_2_0",
+    "target_layer": -2
   }
