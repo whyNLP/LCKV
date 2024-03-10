@@ -69,6 +69,21 @@ MODEL_CONFIG_CLASSES = list(MODEL_FOR_CAUSAL_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
+# learning rate decay scheduler (cosine with warmup)
+def tinyllama_get_lr(
+    current_step: int, *, num_warmup_steps: int, num_training_steps: int, num_cycles: float
+):
+    final_div_factor = 0.1
+    if current_step < num_warmup_steps:
+        return float(current_step) / float(max(1, num_warmup_steps))
+    progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
+    coeff = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
+    return final_div_factor + coeff * (1 - final_div_factor)
+
+## Uncomment the following line to use the cosine schedule with the minimum lr set to 10% of the initial lr
+# transformers.optimization._get_cosine_schedule_with_warmup_lr_lambda = tinyllama_get_lr
+
+
 @dataclass
 class ModelArguments:
     """
