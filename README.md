@@ -17,11 +17,104 @@ This work is inspired by [Probabilistic Transformer](https://github.com/whyNLP/P
 
 ## Installation
 
+You may install the dependencies with the following commands:
+
 ```sh
 conda install pytorch pytorch-cuda=12.1 -c pytorch -c nvidia
 pip install xformers --index-url https://download.pytorch.org/whl/cu121
 pip install -r requirements.txt
 ```
+
+where the CUDA version is set to `12.1`. For other CUDA versions, please refer to installation instructions of [PyTorch](https://pytorch.org/get-started/locally/) and [xFormers](https://github.com/facebookresearch/xformers). See [Trouble shooting](#trouble-shooting) for more details.
+
+## Usage
+
+Our implementation is based on HuggingFace `transformers` where we register a new model `opt-llama` that supports the Layer-Condensed KV Cache.
+
+```python
+import models # register the opt-llama model
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
+model = AutoModelForCausalLM.from_config(config="configs/tinyllama_opt.json")
+```
+
+and now you have a randomly initialized model with the Layer-Condensed KV Cache.
+
+### Optimization
+
+We follows all the acceleration tricks in [tinyllama](https://github.com/jzhang38/TinyLlama), with the minimal modification to the huggingface transformers code. So we may train the model with [huggingface trainer](https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_clm.py) with the training speed comparable to the original tinyllama code.
+
+To enable the optimization, add the following environment variable before running the training script:
+
+```sh
+# improvement: huge
+export LCKV_FLASH_ATTN=1
+# improvement: significant
+export LCKV_FUSED_RMSNORM=1
+# improvement: none
+export LCKV_FUSED_CROSSENTROPY=1
+# improvement: none
+export LCKV_FUSED_ROTARY=1
+# improvement: slightly
+export LCKV_FUSED_SWIGLU=1
+```
+
+We've done this for you in the provided training scripts. You may also refer to my [tinyllama](https://github.com/whyNLP/tinyllama) repo for a pure PyTorch implementation for the Llama model.
+
+### Training
+
+We use the same [training script](https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_clm.py) as the original `transformers` library. You may refer to the [official documentation](https://huggingface.co/transformers/training.html) for more details.
+
+We provide a training script `run_clm.sh` for training a 50M parameter model on the `wikitext-103` dataset. You may run the script with:
+
+```sh
+bash run_clm.sh
+```
+
+See the script for more details.
+
+### Inference
+
+We use the same [inference script](https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-generation/run_generation.py) as the original `transformers` library. To perform inference, you may run the following command:
+
+```sh
+bash run_generation.sh
+```
+
+See the script for more details.
+
+### Streaming
+
+We integrate our model with [StreamingLLM](https://github.com/mit-han-lab/streaming-llm). To perform streaming inference, you may run the following command:
+
+```sh
+bash run_streaming.sh
+```
+
+See the script for more details. The [codes](test_streaming.py) follow the [official implementation](https://github.com/mit-han-lab/streaming-llm/blob/main/examples/eval_long_ppl.py) with minimal modification.
+
+> [!WARNING]
+> The script `run_streaming.py` is not supported yet.
+
+### Evaluation
+
+We use [LM-Harness](https://github.com/EleutherAI/lm-evaluation-harness) to evaluate the model. You may run the following command:
+
+```sh
+python test_harness.py
+```
+
+Change the `model_args` and `tasks` in the script to evaluate different models and datasets.
+
+### Latency Testing
+
+To test the latency of the model, you may run the following command:
+
+```sh
+python test_latency.py
+```
+
 
 ## Trouble shooting
 
@@ -45,17 +138,16 @@ FLASH_ATTENTION_FORCE_BUILD=TRUE pip install flash-attn
 ### CUDA version
 
 The cuda version may affect the installation of:
-- PyTorch
-- Flash-Attn
-- XFormers
+- [PyTorch](https://pytorch.org/get-started/locally/)
+- [Flash-Attn](https://github.com/Dao-AILab/flash-attention)
+- [xFormers](https://github.com/facebookresearch/xformers)
 
 Please make sure to install the correct version of the packages (so long as they are consistent, the code would work). Also make sure that `nvcc` is installed and available in the path.
 
-Our environment is set to `CUDA 12.1` and you may install with
+Our experiment environment uses `CUDA 12.1` and you may install with
 ```sh
 conda install pytorch==2.1.0 pytorch-cuda=12.1 -c pytorch -c nvidia
 pip install xformers==0.0.22.post7 --index-url https://download.pytorch.org/whl/cu121
 pip install -r requirements.txt
 ```
-
 
