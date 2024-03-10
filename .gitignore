@@ -1,4 +1,6 @@
 __pycache__
 wandb
 outputs
+harness
+streaming
 run*.sh

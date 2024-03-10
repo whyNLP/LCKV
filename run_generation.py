@@ -35,10 +35,10 @@ from transformers import (
     CTRLLMHeadModel,
     CTRLTokenizer,
     GenerationMixin,
-    GPT2LMHeadModel as _GPT2LMHeadModel,
+    GPT2LMHeadModel,
     GPT2Tokenizer,
     GPTJForCausalLM,
-    LlamaForCausalLM as _LlamaForCausalLM,
+    LlamaForCausalLM,
     LlamaTokenizer,
     OpenAIGPTLMHeadModel,
     OpenAIGPTTokenizer,
@@ -51,15 +51,7 @@ from transformers import (
     XLNetTokenizer,
 )
 from transformers.modeling_outputs import CausalLMOutputWithPast
-from models import (
-    GPT2LMHeadModel,
-    ALGPT2LMHeadModel,
-    CycleGPT2LMHeadModel,
-    LlamaForCausalLM,
-    ALLlamaForCausalLM,
-    CycleLlamaForCausalLM,
-    LlamaKVForCausalLM,
-)
+from models import OptLlamaForCausalLM
 
 
 logging.basicConfig(
@@ -72,13 +64,7 @@ logger = logging.getLogger(__name__)
 MAX_LENGTH = int(10000)  # Hardcoded max length to avoid infinite loop
 
 MODEL_CLASSES = {
-    "origin-gpt2": (_GPT2LMHeadModel, GPT2Tokenizer),
-    "best-llama": (LlamaForCausalLM, LlamaTokenizer),
-    "kv-llama": (LlamaKVForCausalLM, LlamaTokenizer),
-    "alllama": (ALLlamaForCausalLM, LlamaTokenizer),
-    "cyclellama": (CycleLlamaForCausalLM, LlamaTokenizer),
-    "algpt2": (ALGPT2LMHeadModel, GPT2Tokenizer),
-    "cyclegpt2": (CycleGPT2LMHeadModel, GPT2Tokenizer),
+    "opt-llama": (OptLlamaForCausalLM, LlamaTokenizer),
     "gpt2": (GPT2LMHeadModel, GPT2Tokenizer),
     "ctrl": (CTRLLMHeadModel, CTRLTokenizer),
     "openai-gpt": (OpenAIGPTLMHeadModel, OpenAIGPTTokenizer),
@@ -87,7 +73,7 @@ MODEL_CLASSES = {
     "xlm": (XLMWithLMHeadModel, XLMTokenizer),
     "gptj": (GPTJForCausalLM, AutoTokenizer),
     "bloom": (BloomForCausalLM, BloomTokenizerFast),
-    "llama": (_LlamaForCausalLM, LlamaTokenizer),
+    "llama": (LlamaForCausalLM, LlamaTokenizer),
     "opt": (OPTForCausalLM, GPT2Tokenizer),
 }
 

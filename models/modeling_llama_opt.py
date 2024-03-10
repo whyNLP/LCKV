@@ -310,8 +310,8 @@ class LlamaAttentionBase(_LlamaAttention):
             )
 
         if attention_mask is not None:
-            raise ValueError(
-                "Attention mask is not supported for decoding."
+            warnings.warn(
+                "Attention mask is not supported for decoding. We just ignore it."
             )
 
         # upcast attention to fp32

@@ -716,17 +716,19 @@ def experiment(tokenizer, model, prompt, max_length, iterator, verbose=False):
 
 def main():
 
+    # do not consequectively run the same model, it will cause CUDA out of memory
+
     print(">>> llama-7b 2048+2048 llama")
     tokenizer, model = prepare("llama", "7b")
     experiment(tokenizer, model, prompt_text_2048, 2048+2048, 1)
 
-    print(">>> llama-7b 2048+2048 opt-llama")
-    tokenizer, model = prepare("opt-llama", "7b")
-    experiment(tokenizer, model, prompt_text_2048, 2048+2048, 1)
+    # print(">>> llama-7b 2048+2048 opt-llama")
+    # tokenizer, model = prepare("opt-llama", "7b")
+    # experiment(tokenizer, model, prompt_text_2048, 2048+2048, 1)
 
-    print(">>> llama-7b 2048+2048 opt-llama-10")
-    tokenizer, model = prepare("opt-llama-10", "7b")
-    experiment(tokenizer, model, prompt_text_2048, 2048+2048, 1)
+    # print(">>> llama-7b 2048+2048 opt-llama-10")
+    # tokenizer, model = prepare("opt-llama-10", "7b")
+    # experiment(tokenizer, model, prompt_text_2048, 2048+2048, 1)
 
 
 

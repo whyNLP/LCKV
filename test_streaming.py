@@ -104,6 +104,7 @@ if args.enable_streaming:
 else:
     kv_cache = None
 
+## uncomment the following lines to enable latency measurement
 os.makedirs(args.output_dir, exist_ok=True)
 with open(f"{args.output_dir}/log.txt", "w") as f:
 
