@@ -386,7 +386,7 @@ def main():
         config.update_from_string(args.config_overrides)
         logger.info(f"New config: {config}")
     import os
-    if os.environ.get('ALGPT_FLASH_ATTN', False):
+    if os.environ.get('LCKV_FLASH_ATTN', False):
         config._flash_attn_2_enabled = True
     torch_dtype = (
         args.torch_dtype

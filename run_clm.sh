@@ -4,15 +4,15 @@ echo "Start running..."
 echo "Slurm job id: $SLURM_JOB_ID"
 
 # improvement: huge
-export ALGPT_FLASH_ATTN=1
+export LCKV_FLASH_ATTN=1
 # improvement: significant
-export ALGPT_FUSED_RMSNORM=1
+export LCKV_FUSED_RMSNORM=1
 # improvement: none
-export ALGPT_FUSED_CROSSENTROPY=1
+export LCKV_FUSED_CROSSENTROPY=1
 # improvement: none
-export ALGPT_FUSED_ROTARY=1
+export LCKV_FUSED_ROTARY=1
 # improvement: slightly
-export ALGPT_FUSED_SWIGLU=1
+export LCKV_FUSED_SWIGLU=1
 
 ## pretrain code for llama-tiny
 #  - to pretrain a tinyllama, change the config to `TinyLlama/TinyLlama-1.1B-intermediate-step-955k-token-2T`
@@ -53,7 +53,7 @@ accelerate launch run_clm.py \
 
 
 ## uncomment to enable evaluation at token level (each token will only look at the last layer of the previous tokens)
-# export ALGPT_INFERENCE=1
+# export LCKV_INFERENCE=1
 
 ## eval code for llama-tiny
 python run_clm.py \

@@ -1336,7 +1336,7 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             )
         elif labels is not None:
             # inference
-            if os.environ.get("ALGPT_INFERENCE", False):
+            if os.environ.get("LCKV_INFERENCE", False):
                 func = self.forward_inference
             else:
                 func = self.forward_training
@@ -1721,7 +1721,7 @@ class LlamaForCausalLM(_LlamaForCausalLM):
                 outputs = tuple(outputs[0], new_past_key_values, *outputs[2:])
 
         hidden_states = outputs[0]
-        if os.environ.get("ALGPT_GENERATION", False):
+        if os.environ.get("LCKV_GENERATION", False):
             # only use the last token
             logits = self.lm_head(hidden_states[:,-1:,:])
         else:

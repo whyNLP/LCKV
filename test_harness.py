@@ -1,10 +1,10 @@
 import os
 
-os.environ['ALGPT_FLASH_ATTN'] = '1'
-os.environ['ALGPT_FUSED_RMSNORM'] = '1'
-os.environ['ALGPT_FUSED_CROSSENTROPY'] = '1'
-os.environ['ALGPT_FUSED_ROTARY'] = '1'
-os.environ['ALGPT_FUSED_SWIGLU'] = '1'
+os.environ['LCKV_FLASH_ATTN'] = '1'
+os.environ['LCKV_FUSED_RMSNORM'] = '1'
+os.environ['LCKV_FUSED_CROSSENTROPY'] = '1'
+os.environ['LCKV_FUSED_ROTARY'] = '1'
+os.environ['LCKV_FUSED_SWIGLU'] = '1'
 
 import models
 import lm_eval

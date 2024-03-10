@@ -450,7 +450,7 @@ def main():
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
     
-    use_flash_attention_2=os.environ.get('ALGPT_FLASH_ATTN', False)
+    use_flash_attention_2=os.environ.get('LCKV_FLASH_ATTN', False)
 
     if model_args.model_name_or_path:
         torch_dtype = (

@@ -1,13 +1,13 @@
 import os
 from collections.abc import Iterable
 
-os.environ['ALGPT_FLASH_ATTN'] = '1'
-os.environ['ALGPT_FUSED_RMSNORM'] = '1'
-os.environ['ALGPT_FUSED_CROSSENTROPY'] = '1'
-# os.environ['ALGPT_FUSED_ROTARY'] = '1'
-os.environ['ALGPT_FUSED_SWIGLU'] = '1'
+os.environ['LCKV_FLASH_ATTN'] = '1'
+os.environ['LCKV_FUSED_RMSNORM'] = '1'
+os.environ['LCKV_FUSED_CROSSENTROPY'] = '1'
+# os.environ['LCKV_FUSED_ROTARY'] = '1'
+os.environ['LCKV_FUSED_SWIGLU'] = '1'
 
-os.environ['ALGPT_GENERATION'] = '1'
+os.environ['LCKV_GENERATION'] = '1'
 
 from models import OptLlamaForCausalLM
 from transformers import (
