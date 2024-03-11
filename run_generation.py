@@ -21,7 +21,6 @@
 import argparse
 import inspect
 import logging
-import time
 from typing import Tuple
 
 import torch
@@ -355,7 +354,6 @@ def main():
             "Override the default `torch.dtype` and load the model under this dtype. If `auto` is passed, the "
             "dtype will be automatically derived from the model's weights."
     ), choices=["auto", "bfloat16", "float16", "float32"])
-    parser.add_argument("--no_show", action="store_true", help="Whether or not to show the generated text")
     args = parser.parse_args()
 
     # Initialize the distributed state.
@@ -403,8 +401,6 @@ def main():
     max_seq_length = getattr(model.config, "max_position_embeddings", 0)
     args.length = adjust_length_to_model(args.length, max_sequence_length=max_seq_length)
     logger.info(args)
-    import time
-    time.sleep(.5)
 
     prompt_text = args.prompt if args.prompt else input("Model prompt >>> ")
 
@@ -449,8 +445,6 @@ def main():
 
         model = _ModelFallbackWrapper(traced_model, model)
 
-    start = time.time()
-
     output_sequences = model.generate(
         input_ids=input_ids,
         max_length=args.length + len(encoded_prompt[0]),
@@ -462,17 +456,11 @@ def main():
         num_return_sequences=args.num_return_sequences,
     )
 
-    end = time.time()
-    print(f"Time: {end - start}")
-
     # Remove the batch dimension when returning multiple sequences
     if len(output_sequences.shape) > 2:
         output_sequences.squeeze_()
 
     generated_sequences = []
-
-    if args.no_show:
-        return generated_sequences
 
     for generated_sequence_idx, generated_sequence in enumerate(output_sequences):
         print(f"=== GENERATED SEQUENCE {generated_sequence_idx + 1} ===")
@@ -492,60 +480,7 @@ def main():
         generated_sequences.append(total_sequence)
         print(total_sequence)
 
-        # print the generated tokens along with the exited layers
-        _custom_log = getattr(model, "_custom_log", {})
-        if "early_exit_layers" in _custom_log:
-            early_exit_layers = _custom_log.get("early_exit_layers", tuple())
-            early_exit_layers = [x + 1 for x in early_exit_layers] # index starts from 0, now starts from 1
-            token_list = tokenizer.convert_ids_to_tokens(generated_sequence)
-            encoded_length = len(encoded_prompt[0])
-            sequence_with_exit_layer = []
-            for token in token_list[:encoded_length]:
-                sequence_with_exit_layer.append(token)
-            min_level, max_level = min(early_exit_layers), max(early_exit_layers)
-            for token, exit_layer in zip(token_list[encoded_length:], early_exit_layers):
-                sequence_with_exit_layer.append(print_w_level(token, exit_layer, min_level, max_level))
-            print(f"=== GENERATED TOKENS WITH EXIT LAYERS {generated_sequence_idx + 1} ===")
-            print(" ".join(sequence_with_exit_layer))
-
     return generated_sequences
-
-
-def print_w_level(text: str, level: int = None, min_level: int = 1, max_level: int = None):
-    """
-    level is a integer such that min_level <= level <= max_level.
-    """
-    if level is None:
-        return text
-    
-    if max_level - min_level == 0:
-        return f"{text}({level})"
-
-    # default levels
-    levels = [
-        "\033[32;1m", # bright green
-        "\033[32;22m", # normal green
-        "\033[33;22m", # normal yellow
-        "\033[31;22m", # normal red
-        "\033[31;1m", # bright red
-    ]
-
-    # more detailed levels
-    # levels = [
-    #     "\033[32;1m", # bright green
-    #     "\033[32;22m", # normal green
-    #     "\033[32;2m", # dark green
-    #     "\033[33;2m", # dark yellow
-    #     "\033[31;2m", # dark red
-    #     "\033[31;22m", # normal red
-    #     "\033[31;1m", # bright red
-    # ]
-
-    reset = "\033[0m"
-
-    percetage = (level - min_level) / (max_level - min_level)
-    idx = int(percetage * (len(levels) - 1))
-    return f"{levels[idx]}{text}({level}){reset}"
 
 if __name__ == "__main__":
     main()
