@@ -82,7 +82,7 @@ We provide a training script `run_clm.sh` for training a 50M parameter model on 
 bash run_clm.sh
 ```
 
-See the script for more details.
+See the script for more details. For pretraining on SlimPajama, please follow the instructions in [tinyllama-zh](https://github.com/whyNLP/tinyllama-zh) and replace the dataset with SlimPajama.
 
 ### Inference
 
