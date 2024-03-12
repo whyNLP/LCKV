@@ -15,6 +15,8 @@ The code base for project **Layer-Condensed KV Cache**, a new variant of transfo
 
 This work is inspired by [Probabilistic Transformer](https://github.com/whyNLP/Probabilistic-Transformer), where we consider the stacking layer structure of a transformer as an iterative process of improving token representation.
 
+> “我们要多快好省地建设现代大语言模型……多，就是要一次处理更多数据(batch size)；快，就是要小时延(latency)；好，就是要效果好(task performance)；省，就是要省显存(CUDA memory)。LCKV就是一个多快好省的典型。”
+
 ## Installation
 
 You may install the dependencies with the following commands:
