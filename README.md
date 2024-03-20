@@ -163,3 +163,8 @@ pip install xformers==0.0.22.post7 --index-url https://download.pytorch.org/whl/
 pip install -r requirements.txt
 ```
 
+
+## Questions
+> 1. The training is too costly. Is there any method to train faster?
+
+Yes, it is possible to train faster than the approach introduced in the paper, as evidenced by my recent studies. However, I am currently occupied with other projects and will leave this topic to those who are interested in LCKV.
