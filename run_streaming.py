@@ -13,8 +13,12 @@ import sys
 import models
 
 from tqdm import tqdm
-from streaming_llm.utils import load, download_url, load_jsonl
+from streaming_llm.utils import download_url, load_jsonl
 from streaming_llm.enable_streaming_llm import enable_streaming_llm
+from transformers import (
+    AutoTokenizer,
+    AutoModelForCausalLM,
+)
 
 
 @torch.no_grad()
@@ -76,6 +80,29 @@ def streaming_inference(model, tokenizer, prompts, kv_cache=None, max_gen_len=10
             model, tokenizer, input_ids, past_key_values, max_gen_len=max_gen_len
         )
 
+def load(model_name_or_path):
+    print(f"Loading model from {model_name_or_path} ...")
+    # however, tensor parallel for running falcon will occur bugs
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_name_or_path,
+        trust_remote_code=True,
+    )
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name_or_path,
+        device_map="auto",
+        torch_dtype=torch.float16,
+        trust_remote_code=True,
+        use_flash_attention_2=bool(os.environ.get('LCKV_FLASH_ATTN', False))
+    )
+    if tokenizer.pad_token_id is None:
+        if tokenizer.eos_token_id is not None:
+            tokenizer.pad_token_id = tokenizer.eos_token_id
+        else:
+            tokenizer.pad_token_id = 0
+
+    model.eval()
+
+    return model, tokenizer
 
 def main(args):
     model_name_or_path = args.model_name_or_path

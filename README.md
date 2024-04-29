@@ -106,9 +106,6 @@ bash run_streaming.sh
 
 See the script for more details. The [codes](test_streaming.py) follow the [official implementation](https://github.com/mit-han-lab/streaming-llm/blob/main/examples/eval_long_ppl.py) with minimal modification.
 
-> [!WARNING]
-> The script `run_streaming.py` is not supported yet.
-
 ### Evaluation
 
 We use [LM-Harness](https://github.com/EleutherAI/lm-evaluation-harness) to evaluate the model. You may run the following command:
