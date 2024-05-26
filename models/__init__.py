@@ -2,9 +2,14 @@ from .configuration_llama import OptLlamaConfig
 from .modeling_llama_opt import LlamaForCausalLM as OptLlamaForCausalLM
 from .wandb_callback import WandbCallback
 
+from .modeling_yoco import LlamaForCausalLM as YocoForCausalLM
+from .configuration_llama import YocoConfig
+
 from transformers import AutoConfig, AutoModelForCausalLM
 AutoConfig.register("opt-llama", OptLlamaConfig)
 AutoModelForCausalLM.register(OptLlamaConfig, OptLlamaForCausalLM)
+AutoConfig.register("yoco-llama", YocoConfig)
+AutoModelForCausalLM.register(YocoConfig, YocoForCausalLM)
 
 import os
 
@@ -14,6 +19,8 @@ if os.environ.get('LCKV_FUSED_RMSNORM', False):
     transformers.models.llama.modeling_llama.LlamaRMSNorm = RMSNorm
     from . import modeling_llama_opt
     modeling_llama_opt.LlamaRMSNorm = RMSNorm
+    from . import modeling_yoco
+    modeling_yoco.LlamaRMSNorm = RMSNorm
 
 if os.environ.get('LCKV_FUSED_CROSSENTROPY', False):
     import transformers
@@ -21,6 +28,8 @@ if os.environ.get('LCKV_FUSED_CROSSENTROPY', False):
     transformers.models.llama.modeling_llama.CrossEntropyLoss = CrossEntropyLoss
     from . import modeling_llama_opt
     modeling_llama_opt.CrossEntropyLoss = CrossEntropyLoss
+    from . import modeling_yoco
+    modeling_yoco.CrossEntropyLoss = CrossEntropyLoss
 
 if os.environ.get('LCKV_FUSED_ROTARY', False):
     import transformers
@@ -43,12 +52,18 @@ if os.environ.get('LCKV_FUSED_ROTARY', False):
     from . import modeling_llama_opt_streaming
     modeling_llama_opt_streaming.apply_rotary_pos_emb_q = fused_apply_rotary_pos_emb_q
 
+    from . import modeling_yoco
+    modeling_yoco.apply_rotary_pos_emb = fused_apply_rotary_pos_emb
+    modeling_yoco.apply_rotary_pos_emb_q = fused_apply_rotary_pos_emb_q
+
 if os.environ.get('LCKV_FUSED_SWIGLU', False):
     import transformers
     from .llama_fused_swiglu import LlamaMLP
     transformers.models.llama.modeling_llama.LlamaMLP = LlamaMLP
     from . import modeling_llama_opt
     modeling_llama_opt.LlamaMLP = LlamaMLP
+    from . import modeling_yoco
+    modeling_yoco.LlamaMLP = LlamaMLP
 
 try:
     from streaming_llm import enable_streaming_llm

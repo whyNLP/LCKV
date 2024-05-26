@@ -106,3 +106,6 @@ class OptLlamaConfig(_LlamaConfig):
                 raise ValueError("The target layer should be the layer of type 2.")
         if layer_types.count(2) > 1:
             raise ValueError("Only one layer can be type 2.")
+
+class YocoConfig(OptLlamaConfig):
+    model_type = "yoco-llama"
