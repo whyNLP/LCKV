@@ -22,6 +22,10 @@ This work is inspired by [Probabilistic Transformer](https://github.com/whyNLP/P
 </div>
 </details>
 
+## News
+- [24/05/28] This code base now also supports [CLA: Cross-Layer Attention](http://arxiv.org/abs/2405.12981). The idea is similar, but they 1) devide the transformer layers into small groups with 2-4 layers in each group; 2) pairs the queries of all the layers with the keys and values of the bottom layer in each group.
+- [24/05/20] LCKV initial code release. 
+
 ## Installation
 
 You may install the dependencies with the following commands:
@@ -36,10 +40,10 @@ where the CUDA version is set to `12.1`. For other CUDA versions, please refer t
 
 ## Usage
 
-Our implementation is based on HuggingFace `transformers` where we register a new model `opt-llama` that supports the Layer-Condensed KV Cache.
+Our implementation is based on HuggingFace `transformers`. We register a new model `opt-llama` that supports the Layer-Condensed KV Cache, and a new model `cla-llama` that supports CLA. Both of them are variants of transformer `llama` models.
 
 ```python
-import models # register the opt-llama model
+import models # register the opt-llama and cla-llama model
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
@@ -73,11 +77,69 @@ We've done this for you in the provided training scripts. You may also refer to 
 
 We provide some sample configuration files in the  `configs` folder. The config settings are defined in [models/configuration_llama.py](models/configuration_llama.py). You may refer to this file for more details.
 
+#### Layer-Condensed KV Cache (LCKV)
+
+Option 1: Modify the configurations in python:
+
+```python
+from models import OptLlamaConfig
+
+# we have prepared a sample configuration file
+config = OptLlamaConfig.from_pretrained("configs/tinyllama_opt.json")
+
+# you may modify the configuration as you like
+config.num_trained_encoders = 1      # see figure below, b-1 in the paper
+config.num_encoders         = 8      # see figure below, m+b-1 in the paper
+config.layer_types          = "0_1_1_1_1_1_1_1_1_1_1_1_1_1_1_1_1_1_1_1_2_0" # 0: std tsfm layer; 1: layers use top layer KVs; 2: layers generate the key-value pair for other layers to use
+config.target_layer         = -2     # the layer to generate the key-value pair for other layers to use
+config.train_kv             = False  # add MSE loss for the key-value pair, see paper appendix
+
+# we also supports this
+config.layer_types          = "0_0_0_0_0_0_0_0_0_0_2_1_1_1_1_1_1_1_1_1_1_1" # YOCO config.
+config.layer_types          = "0_0_0_0_0_0_0_0_0_0_1_1_1_1_1_1_2_1_1_1_1_1" # 2 does not necessarily have to be the last layer
+```
+
+Option 2: Modify the configurations in the shell script (via `--config_overrides`):
+
+```sh
+accelerate launch run_clm.py \
+    --config_name configs/tinyllama_opt.json \
+    --config_overrides model_type=opt-llama,num_encoders=8,num_trained_encoders=1,layer_types=0_1_1_1_1_1_2_0,target_layer=-2,train_kv=false \
+    ...
+```
+
 Notice that some of the settings have different names and meanings compared to that in our paper. The following figure explains the correspondence:
 
 <div align="center">
 <img width="500" src="https://github.com/whyNLP/LCKV/assets/43395692/74671862-146f-492c-8d17-d0e6a7697170" />
 </div>
+
+#### Cross-Layer Attention (CLA)
+
+Option 1: Modify the configurations in python:
+
+```python
+from models import ClaLlamaConfig
+
+# we have prepared a sample configuration file
+config = OptLlamaConfig.from_pretrained("configs/tinyllama_cla.json")
+
+# you may modify the configuration as you like
+config.layer_types          = "2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1" # CLA-2, similar to LCKV
+config.layer_types          = "0_2_1_1_2_1_1_2_1_1_2_1_1_2_1_1_2_1_1_2_1_1" # CLA-3, also supports 0
+```
+
+Option 2: Modify the configurations in the shell script (via `--config_overrides`):
+
+```sh
+accelerate launch run_clm.py \
+    --config_name configs/tinyllama_cla.json \
+    --config_overrides layer_types=2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1 \
+    ...
+```
+
+> [!WARNING]
+> The authors of CLA tuned the hyperparameters of the model architecture and training settings for the CLA model. The provided configuration files are not the optimal settings for the CLA model. You may need to change the hyperparameters for the CLA model, such as `intermediate_size`, `num_key_value_heads`, etc.
 
 ### Training
 
@@ -89,7 +151,7 @@ We provide a training script `run_clm.sh` for training a 50M parameter model on 
 bash run_clm.sh
 ```
 
-See the script for more details. For pretraining on SlimPajama, please follow the instructions in [tinyllama-zh](https://github.com/whyNLP/tinyllama-zh) and replace the dataset with SlimPajama.
+See the script for more details. For CLA, we also provide a sample training script `run_cla.sh`. For pretraining on SlimPajama, please follow the instructions in [tinyllama-zh](https://github.com/whyNLP/tinyllama-zh) and replace the dataset with SlimPajama.
 
 ### Inference
 
@@ -99,7 +161,7 @@ We use the same [inference script](https://github.com/huggingface/transformers/b
 bash run_generation.sh
 ```
 
-See the script for more details.
+You may get responses from the trained model given any prompts. See the script for more details.
 
 ### Streaming
 
@@ -168,3 +230,13 @@ pip install xformers==0.0.22.post7 --index-url https://download.pytorch.org/whl/
 pip install -r requirements.txt
 ```
 
+### The performance is incredibly bad
+
+Some users report that the model performance is incredibly bad and the loss does not decrease when using `torch_dtype=bfloat16` (requried by flash attention). It seems to be problems about precisions. I cannot reproduce this issue, but a potential solution is to use larger learning rate or just switch off flash attention and use `float32` instead.
+
+
+## Questions
+
+> 1. Is it possible to integrate the LCKV with MQA / GQA?
+
+Yes. The fact is that we have already done this in our experiments. Tinyllama uses 32 attention heads and 4 KV heads. We follow the same setting in our experiments. If you want to experiment with different settings, you may modify the `num_attention_heads` and `num_key_value_heads` in the configuration file.
