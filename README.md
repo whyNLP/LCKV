@@ -23,7 +23,7 @@ This work is inspired by [Probabilistic Transformer](https://github.com/whyNLP/P
 </details>
 
 ## News
-- [24/05/28] This code base now also supports [CLA: Cross-Layer Attention](http://arxiv.org/abs/2405.12981). The idea is similar, but they 1) devide the transformer layers into small groups with 2-4 layers in each group; 2) pairs the queries of all the layers with the keys and values of the bottom layer in each group.
+- [24/05/28] This code base now also supports Cross-Layer Attention (CLA). The idea is similar, but they 1) devide the transformer layers into small groups with 2-4 layers in each group; 2) pairs the queries of all the layers with the keys and values of the bottom layer in each group. See details in their paper "[Reducing Transformer Key-Value Cache Size with Cross-Layer Attention](http://arxiv.org/abs/2405.12981)".
 - [24/05/20] LCKV initial code release. 
 
 ## Installation
@@ -125,8 +125,8 @@ from models import ClaLlamaConfig
 config = OptLlamaConfig.from_pretrained("configs/tinyllama_cla.json")
 
 # you may modify the configuration as you like
-config.layer_types          = "2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1" # CLA-2, similar to LCKV
-config.layer_types          = "0_2_1_1_2_1_1_2_1_1_2_1_1_2_1_1_2_1_1_2_1_1" # CLA-3, also supports 0
+config.layer_types          = "2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1" # CLA-2, similar to LCKV, "1" uses the KVs from the nearest previous layer
+config.layer_types          = "0_2_1_1_2_1_1_2_1_1_2_1_1_2_1_1_2_1_1_2_1_1" # CLA-3, also supports "0"
 ```
 
 Option 2: Modify the configurations in the shell script (via `--config_overrides`):
@@ -230,9 +230,9 @@ pip install xformers==0.0.22.post7 --index-url https://download.pytorch.org/whl/
 pip install -r requirements.txt
 ```
 
-### The performance is incredibly bad
+### The performance is incredibly poor
 
-Some users report that the model performance is incredibly bad and the loss does not decrease when using `torch_dtype=bfloat16` (requried by flash attention). It seems to be problems about precisions. I cannot reproduce this issue, but a potential solution is to use larger learning rate or just switch off flash attention and use `float32` instead.
+Some users have reported that the model's performance is incredibly poor and the loss does not decrease when using `torch_dtype=bfloat16` (requried by flash attention). This issue seems to be related to precision problems. Although I have not been able to reproduce this issue, a potential solution could be to use a larger learning rate. To confirm whether the issue is indeed related to precision, one could disable flash attention and use float32 instead. If the loss decreases as expected, then it is likely that the issue is related to precision.
 
 
 ## Questions
