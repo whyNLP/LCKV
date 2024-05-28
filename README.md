@@ -122,7 +122,7 @@ Option 1: Modify the configurations in python:
 from models import ClaLlamaConfig
 
 # we have prepared a sample configuration file
-config = OptLlamaConfig.from_pretrained("configs/tinyllama_cla.json")
+config = ClaLlamaConfig.from_pretrained("configs/tinyllama_cla.json")
 
 # you may modify the configuration as you like
 config.layer_types          = "2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1" # CLA-2, similar to LCKV, "1" uses the KVs from the nearest previous layer
