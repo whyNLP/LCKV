@@ -6,13 +6,13 @@
     "bos_token_id": 1,
     "eos_token_id": 2,
     "hidden_act": "silu",
-    "hidden_size": 2048,
+    "hidden_size": 512,
     "initializer_range": 0.02,
-    "intermediate_size": 5632,
-    "max_position_embeddings": 2048,
-    "model_type": "yoco-llama",
-    "num_attention_heads": 32,
-    "num_hidden_layers": 22,
+    "intermediate_size": 1024,
+    "max_position_embeddings": 1024,
+    "model_type": "cla-llama",
+    "num_attention_heads": 8,
+    "num_hidden_layers": 8,
     "num_key_value_heads": 4,
     "pretraining_tp": 1,
     "rms_norm_eps": 1e-05,
@@ -21,10 +21,5 @@
     "torch_dtype": "float32",
     "transformers_version": "4.31.0.dev0",
     "use_cache": true,
-    "vocab_size": 32000,
-    "num_trained_encoders": 1,
-    "num_encoders": 8,
-    "train_kv": false,
-    "layer_types": "0_1_1_1_1_1_1_1_1_1_1_1_1_1_1_1_1_1_1_1_2_0",
-    "target_layer": -2
-}
+    "layer_types": "2_1_2_1_2_1_2_1"
+  }
