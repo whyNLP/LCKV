@@ -234,6 +234,10 @@ pip install -r requirements.txt
 
 Some users have reported that the model's performance is incredibly poor and the loss does not decrease when using `torch_dtype=bfloat16` (requried by flash attention). This issue seems to be related to precision problems. Although I have not been able to reproduce this issue, a potential solution could be to use a larger learning rate. To confirm whether the issue is indeed related to precision, one could disable flash attention and use float32 instead. If the loss decreases as expected, then it is likely that the issue is related to precision.
 
+### The code always raises exceptions
+
+Since we start the project very early, this code base uses an old version of `transformers` (v.4.35.2). Newer versions may not be compatible with the code (I think some minor changes would fix the issue).
+
 
 ## Questions
 
