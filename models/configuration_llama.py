@@ -107,7 +107,7 @@ class OptLlamaConfig(_LlamaConfig):
         if layer_types.count(2) > 1:
             raise ValueError("Only one layer can be type 2.")
 
-class ClaConfig(_LlamaConfig):
+class ClaLlamaConfig(_LlamaConfig):
     model_type = "cla-llama"
 
     def __init__(

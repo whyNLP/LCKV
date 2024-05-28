@@ -3,13 +3,13 @@ from .modeling_llama_opt import LlamaForCausalLM as OptLlamaForCausalLM
 from .wandb_callback import WandbCallback
 
 from .modeling_llama_cla import LlamaForCausalLM as ClaLlamaForCausalLM
-from .configuration_llama import ClaConfig
+from .configuration_llama import ClaLlamaConfig
 
 from transformers import AutoConfig, AutoModelForCausalLM
 AutoConfig.register("opt-llama", OptLlamaConfig)
 AutoModelForCausalLM.register(OptLlamaConfig, OptLlamaForCausalLM)
-AutoConfig.register("cla-llama", ClaConfig)
-AutoModelForCausalLM.register(ClaConfig, ClaLlamaForCausalLM)
+AutoConfig.register("cla-llama", ClaLlamaConfig)
+AutoModelForCausalLM.register(ClaLlamaConfig, ClaLlamaForCausalLM)
 
 import os
 

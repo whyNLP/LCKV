@@ -58,7 +58,7 @@ from transformers.models.llama.modeling_llama import (
     logger
 )
 
-from .configuration_llama import ClaConfig
+from .configuration_llama import ClaLlamaConfig
 
 def apply_rotary_pos_emb_q(q, cos, sin, position_ids, unsqueeze_dim=1):
     cos = cos[position_ids].unsqueeze(unsqueeze_dim)
@@ -138,6 +138,28 @@ class LlamaAttentionMiddle(LlamaAttentionBase):
     Use encoder_outputs as the KVs.
     """
 
+    def __init__(self, config: ClaLlamaConfig):
+        """remove the weights for kvs."""
+        super(_LlamaAttention, self).__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.hidden_size // self.num_heads
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.max_position_embeddings = config.max_position_embeddings
+        self.rope_theta = config.rope_theta
+        self.is_causal = True
+
+        if (self.head_dim * self.num_heads) != self.hidden_size:
+            raise ValueError(
+                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
+                f" and `num_heads`: {self.num_heads})."
+            )
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
+        self._init_rope()
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -157,12 +179,9 @@ class LlamaAttentionMiddle(LlamaAttentionBase):
         bsz, q_len, _ = hidden_states.size()
 
         if self.config.pretraining_tp > 1:
-            key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
             query_slices = self.q_proj.weight.split(
                 (self.num_heads * self.head_dim) // self.config.pretraining_tp, dim=0
             )
-            key_slices = self.k_proj.weight.split(key_value_slicing, dim=0)
-            value_slices = self.v_proj.weight.split(key_value_slicing, dim=0)
 
             query_states = [F.linear(hidden_states, query_slices[i]) for i in range(self.config.pretraining_tp)]
             query_states = torch.cat(query_states, dim=-1)
@@ -237,6 +256,28 @@ class LlamaFlashAttention2Middle(LlamaFlashAttention2Base):
     """
     Use encoder_outputs as the KVs.
     """
+
+    def __init__(self, config: ClaLlamaConfig):
+        """remove the weights for kvs."""
+        super(_LlamaAttention, self).__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.hidden_size // self.num_heads
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.max_position_embeddings = config.max_position_embeddings
+        self.rope_theta = config.rope_theta
+        self.is_causal = True
+
+        if (self.head_dim * self.num_heads) != self.hidden_size:
+            raise ValueError(
+                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
+                f" and `num_heads`: {self.num_heads})."
+            )
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
+        self._init_rope()
 
     def forward(
         self,
@@ -333,7 +374,7 @@ class LlamaFlashAttention2Middle(LlamaFlashAttention2Base):
 
 
 class LlamaDecoderLayer(_LlamaDecoderLayer):
-    def __init__(self, config: ClaConfig, layer_idx: int):
+    def __init__(self, config: ClaLlamaConfig, layer_idx: int):
         super(_LlamaDecoderLayer, self).__init__()
         self.hidden_size = config.hidden_size
         attn_cls = self._get_attn_cls(config, layer_idx)
@@ -342,7 +383,7 @@ class LlamaDecoderLayer(_LlamaDecoderLayer):
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
     
-    def _get_attn_cls(self, config: ClaConfig, layer_idx: int):
+    def _get_attn_cls(self, config: ClaLlamaConfig, layer_idx: int):
         layer_types = [int(x) for x in config.layer_types.split("_")]
         layer_type = layer_types[layer_idx]
 
@@ -434,11 +475,11 @@ class LlamaModel(_LlamaModel):
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
 
     Args:
-        config: ClaConfig
+        config: ClaLlamaConfig
     """
-    config_class = ClaConfig
+    config_class = ClaLlamaConfig
 
-    def __init__(self, config: ClaConfig):
+    def __init__(self, config: ClaLlamaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -564,7 +605,7 @@ class LlamaModel(_LlamaModel):
 
 
 class LlamaForCausalLM(_LlamaForCausalLM):
-    config_class = ClaConfig
+    config_class = ClaLlamaConfig
 
     def __init__(self, config):
         super(_LlamaForCausalLM, self).__init__(config)
