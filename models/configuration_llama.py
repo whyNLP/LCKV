@@ -106,3 +106,47 @@ class OptLlamaConfig(_LlamaConfig):
                 raise ValueError("The target layer should be the layer of type 2.")
         if layer_types.count(2) > 1:
             raise ValueError("Only one layer can be type 2.")
+
+class ClaLlamaConfig(_LlamaConfig):
+    model_type = "cla-llama"
+
+    def __init__(
+        self,
+        layer_types: str = None,
+        **kwargs,
+    ):
+        """
+        This is an implementation of the Cross-Layer Attention (CLA) model.
+
+        Args:
+            layer_types (`str`, *optional*, defaults to ""):
+                The type of each layer. The value should be a underscore separated string
+                of integers. The value "0" means the layer will use the key-value pair in
+                the original layers as the kv cache. The value "1" means the layer will
+                use the key-value pair in the nearest lower layer as the kv cache. 
+                The value "2" is the same as "0", but to be consistent with LCKV we name
+                the bottom layer of each group as "2". The default value is all "0".
+        
+                Example:
+                - "2_1_2_1_2_1_2_1_2_1" is a CLA-2 model with 10 layers.
+                - "0_2_1_1_2_1_1_2_1_1" is a CLA-3 model with 10 layers.
+        
+        See more info in Figure 2 of the paper "Reducing Transformer Key-Value Cache
+        Size with Cross-Layer Attention", http://arxiv.org/abs/2405.12981
+        """
+        super().__init__(**kwargs)
+        self.layer_types = layer_types
+
+        if self.layer_types is None:
+            self.layer_types = "_".join(["0"]*self.num_hidden_layers)
+
+        # post check
+        num_hidden_layers = self.num_hidden_layers
+        layer_types = [int(x) for x in self.layer_types.split("_")]
+        if len(layer_types) != num_hidden_layers:
+            raise ValueError("The number of layer types should be equal to the number of hidden layers.")
+        for i in range(num_hidden_layers):
+            if layer_types[i] not in (0, 1, 2):
+                raise ValueError("The layer type should be one of 0, 1 and 2.")
+        if layer_types[0] == 1:
+            raise ValueError("The first layer should be type 0 or 2. It must calculates the KV.")
