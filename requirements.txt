@@ -4,6 +4,7 @@ datasets
 evaluate
 scikit-learn
 deepspeed
+trl == 0.8.6
 
 sentencepiece
 

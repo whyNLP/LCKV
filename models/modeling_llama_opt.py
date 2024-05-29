@@ -242,7 +242,7 @@ class LlamaAttentionBase(_LlamaAttention):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights + attention_mask[:, :, :-1, :-1]
+            attn_weights = attn_weights + attention_mask[:, :, 1:, 1:]
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
@@ -518,6 +518,9 @@ class LlamaFlashAttention2Base(_LlamaFlashAttention2):
             value_states = value_states.to(target_dtype)
         
         query_states = query_states[:, 1:, :, :]
+
+        if attention_mask is not None:
+            attention_mask = attention_mask[:, 1:]
 
         attn_output = self._flash_attention_forward(
             query_states, key_states, value_states, attention_mask, q_len-1, dropout=dropout_rate
