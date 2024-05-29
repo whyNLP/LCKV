@@ -9,8 +9,6 @@ export LCKV_FUSED_ROTARY=1
 # improvement: slightly
 export LCKV_FUSED_SWIGLU=1
 
-# run_streaming.py is not supported yet
-
 # streaming test
 python test_streaming.py \
     --model_name_or_path outputs/llamatiny-3090-test \
