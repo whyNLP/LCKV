@@ -27,6 +27,8 @@ from trl import (
     get_peft_config,
     get_quantization_config,
     get_kbit_device_map,
+    DataCollatorForCompletionOnlyLM,
+    setup_chat_format
 )
 
 tqdm.pandas()
@@ -62,8 +64,8 @@ if __name__ == "__main__":
         device_map=get_kbit_device_map() if quantization_config is not None else None,
         quantization_config=quantization_config,
     )
-    tokenizer = AutoTokenizer.from_pretrained(model_config.model_name_or_path, use_fast=True)
-    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer = AutoTokenizer.from_pretrained(model_config.model_name_or_path, add_eos_token=True, use_fast=True)
+    tokenizer.pad_token = tokenizer.unk_token # do not use eos_token, see https://huggingface.co/docs/trl/sft_trainer#train-on-completions-only
 
     ################
     # Dataset
@@ -72,6 +74,29 @@ if __name__ == "__main__":
 
     train_dataset = raw_datasets[args.dataset_train_name]
     eval_dataset = raw_datasets[args.dataset_test_name]
+
+    # clean the dataset so that there is no tailing ### Human: at the end of the text
+    def remove_tailing(element):
+        text = element['text'].split("### Human:")
+        text = ''.join([text[0], "### Human:", text[1]])
+        return {"text": text}
+    
+    train_dataset = train_dataset.map(remove_tailing, batched=False, load_from_cache_file=False)
+
+    # This is hard coded for timdettmers/openassistant-guanaco
+    # see https://huggingface.co/docs/trl/main/en/sft_trainer#using-tokenids-directly-for-responsetemplate for more details
+    instruction_template_with_context = "\n### Human:"  # We added context here: "\n". This is enough for this tokenizer
+    instruction_template_ids = tokenizer.encode(instruction_template_with_context, add_special_tokens=False)[2:]
+
+    response_template_with_context = "\n### Assistant:"
+    response_template_ids = tokenizer.encode(response_template_with_context, add_special_tokens=False)[2:]
+
+    collator = DataCollatorForCompletionOnlyLM(
+        instruction_template=response_template_ids,
+        response_template=response_template_ids,  
+        tokenizer=tokenizer,
+        mlm=False
+    )
 
     ################
     # Optional rich context managers
@@ -99,6 +124,7 @@ if __name__ == "__main__":
             packing=args.packing,
             peft_config=get_peft_config(model_config),
             callbacks=[RichProgressCallback] if TRL_USE_RICH else None,
+            data_collator=collator,
         )
 
     trainer.train()
