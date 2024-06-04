@@ -158,7 +158,6 @@ class GroupOptLlamaConfig(_LlamaConfig):
     def __init__(
         self,
         num_trained_encoders: int = 1,
-        train_kv: bool = False,
         num_encoders: int = 8,
         layer_types: str = None,
         use_new_kv: bool = False,
@@ -169,11 +168,6 @@ class GroupOptLlamaConfig(_LlamaConfig):
             num_trained_encoders (`int`, *optional*, defaults to 1):
                 Number of encoders to train. The last `num_trained_encoders` will be
                 trained. Equivlent to `b-1` in the paper.
-            train_kv (`bool`, *optional*, defaults to False):
-                Whether to train the key-value pair. If set to True, the loss will be
-                added with the MSE loss of the key-value pair in the last layer before
-                and after the decoder. This helps the KV cache to converge so that the
-                training and inference will be consistent, but hurts the performance.
             num_encoders (`int`, *optional*, defaults to 8):
                 The number of encoders. x encoders will ensure the starting x tokens in
                 prediction is consistent with training. Equivlent to `m+b-1` in the paper.
@@ -190,9 +184,9 @@ class GroupOptLlamaConfig(_LlamaConfig):
         """
         super().__init__(**kwargs)
         self.num_trained_encoders = num_trained_encoders
-        self.train_kv = train_kv
         self.num_encoders = num_encoders
         self.layer_types = layer_types
+        self.use_new_kv = use_new_kv
 
         if self.layer_types is None:
             self.layer_types = "_".join(map(str, range(self.num_hidden_layers)))
