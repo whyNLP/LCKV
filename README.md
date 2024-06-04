@@ -141,6 +141,40 @@ accelerate launch run_clm.py \
 > [!WARNING]
 > The authors of CLA tuned the hyperparameters of the model architecture and training settings for the CLA model. The provided configuration files are not the optimal settings for the CLA model. You may need to change the hyperparameters for the CLA model, such as `intermediate_size`, `num_key_value_heads`, etc.
 
+#### Grouped Layer-Condensed KV Cache (grouped LCKV)
+
+This configuration allows you to use the KV cache from any other layer (upper or lower). The configuration is similar to LCKV, but we support multiple target layers.
+
+Option 1: Modify the configurations in python:
+
+```python
+from models import GroupOptLlamaConfig
+
+# we have prepared a sample configuration file
+config = GroupOptLlamaConfig.from_pretrained("configs/llama_tiny_opt_group.json")
+
+# you may modify the configuration as you like
+config.num_trained_encoders = 1      # see figure below, b-1 in the paper
+config.num_encoders         = 8      # see figure below, m+b-1 in the paper
+config.layer_types          = "0_3_3_3_6_6_6_7" # number j in index i means the i-th layer uses the KVs from the j-th layer. Default: 0_1_2_3_4_5_6_7 is the standard transformer.
+
+# we also supports this
+config.layer_types          = "1_1_3_3_5_5_7_7" # Similar to CLA-2, but use the top layer.
+config.layer_types          = "0_0_3_3_3_7_7_7" # it is fine to use lower / middle / upper layers.
+```
+
+Option 2: Modify the configurations in the shell script (via `--config_overrides`):
+
+```sh
+accelerate launch run_clm.py \
+    --config_name configs/tinyllama_opt.json \
+    --config_overrides model_type=group-opt-llama,num_encoders=8,num_trained_encoders=1,layer_types=0_3_3_3_6_6_6_7 \
+    ...
+```
+
+> [!NOTE]
+> This implementation is NOT fully optimized for speed or memory.
+
 ### Training
 
 We use the same [training script](https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_clm.py) as the original `transformers` library. You may refer to the [official documentation](https://huggingface.co/transformers/training.html) for more details.
