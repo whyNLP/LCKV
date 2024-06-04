@@ -150,3 +150,56 @@ class ClaLlamaConfig(_LlamaConfig):
                 raise ValueError("The layer type should be one of 0, 1 and 2.")
         if layer_types[0] == 1:
             raise ValueError("The first layer should be type 0 or 2. It must calculates the KV.")
+
+class GroupOptLlamaConfig(_LlamaConfig):
+
+    model_type = "group-opt-llama"
+
+    def __init__(
+        self,
+        num_trained_encoders: int = 1,
+        train_kv: bool = False,
+        num_encoders: int = 8,
+        layer_types: str = None,
+        use_new_kv: bool = False,
+        **kwargs,
+    ):
+        """
+        Args:
+            num_trained_encoders (`int`, *optional*, defaults to 1):
+                Number of encoders to train. The last `num_trained_encoders` will be
+                trained. Equivlent to `b-1` in the paper.
+            train_kv (`bool`, *optional*, defaults to False):
+                Whether to train the key-value pair. If set to True, the loss will be
+                added with the MSE loss of the key-value pair in the last layer before
+                and after the decoder. This helps the KV cache to converge so that the
+                training and inference will be consistent, but hurts the performance.
+            num_encoders (`int`, *optional*, defaults to 8):
+                The number of encoders. x encoders will ensure the starting x tokens in
+                prediction is consistent with training. Equivlent to `m+b-1` in the paper.
+            layer_types (`str`, *optional*, defaults to ""):
+                The type of each layer. The value should be a underscore separated string
+                of integers. The value i means the layer will use the key-value pair in
+                the i-th layer as the kv cache. The default value is "0_1_2_..." till the
+                number of layers in the current config.
+            use_new_kv (`bool`, *optional*, defaults to False):
+                Whether to use the newly calculated key-value pair in each iteration.
+                If set to True, the key-value pair of currect layer and upper layers
+                will use newly calculated ones instead of those prepared in the last
+                iteration.
+        """
+        super().__init__(**kwargs)
+        self.num_trained_encoders = num_trained_encoders
+        self.train_kv = train_kv
+        self.num_encoders = num_encoders
+        self.layer_types = layer_types
+
+        if self.layer_types is None:
+            self.layer_types = "_".join(map(str, range(self.num_hidden_layers)))
+
+        # post check
+        num_hidden_layers = self.num_hidden_layers
+        layer_types = [int(x) for x in self.layer_types.split("_")]
+        if len(layer_types) != num_hidden_layers:
+            raise ValueError("The number of layer types should be equal to the number of hidden layers.")
+        
