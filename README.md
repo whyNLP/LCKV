@@ -167,7 +167,7 @@ Option 2: Modify the configurations in the shell script (via `--config_overrides
 
 ```sh
 accelerate launch run_clm.py \
-    --config_name configs/tinyllama_opt.json \
+    --config_name configs/llama_tiny_opt_group.json \
     --config_overrides model_type=group-opt-llama,num_encoders=8,num_trained_encoders=1,layer_types=0_3_3_3_6_6_6_7 \
     ...
 ```
