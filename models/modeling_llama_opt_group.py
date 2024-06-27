@@ -1548,12 +1548,12 @@ class LlamaForCausalLM(_LlamaForCausalLM):
             encoder_outputs = list(outputs.past_key_values)
             
             # if "old_key_states" not in locals():
-            #     old_key_states = encoder_outputs[0]
-            #     old_value_states = encoder_outputs[1]
+            #     old_key_states = encoder_outputs[-2][0]
+            #     old_value_states = encoder_outputs[-2][1]
             # else:
-            #     print(i, F.mse_loss(old_key_states, encoder_outputs[0])+F.mse_loss(old_value_states, encoder_outputs[1]))
-            #     old_key_states = encoder_outputs[0]
-            #     old_value_states = encoder_outputs[1]
+            #     print(i, F.mse_loss(old_key_states, encoder_outputs[-2][0])+F.mse_loss(old_value_states, encoder_outputs[-2][1]))
+            #     old_key_states = encoder_outputs[-2][0]
+            #     old_value_states = encoder_outputs[-2][1]
             # breakpoint()
 
         outputs = self.model(
