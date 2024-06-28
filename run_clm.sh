@@ -18,6 +18,7 @@ export LCKV_FUSED_SWIGLU=1
 #  - to pretrain a tinyllama, change the config to `TinyLlama/TinyLlama-1.1B-intermediate-step-955k-token-2T`
 #  - to intialize the model with a pretrained model, add `--model_name_or_path TinyLlama/TinyLlama-1.1B-intermediate-step-1195k-token-2.5T`
 #  - to use the minipile dataset, use `--dataset_name JeanKaddour/minipile`, with proper `--preprocessing_num_workers`
+#  - to use gradient checkpointing, add `--gradient_checkpointing`
 #  - to enable wandb, use `--report_to wandb`
 accelerate launch run_clm.py \
     --tokenizer_name TinyLlama/TinyLlama-1.1B-intermediate-step-955k-token-2T \
