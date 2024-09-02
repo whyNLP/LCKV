@@ -174,7 +174,7 @@ See the script `run_clm.sh` for more details.
 Following [MLKV](http://arxiv.org/abs/2406.09297), we may average the weights from multiple layers to initialize the KV weights in the target layer. We provide a script `convert_pretrained.py` to convert the pretrained model to the LCKV model. You may run the following command:
 
 ```sh
-python convert_pretrained.py --input TinyLlama/TinyLlama-1.1B-intermediate-step-955k-token-2T --config configs/tinyllama_opt.json --output outputs/tinyllama-converted
+python convert_pretrained.py --input TinyLlama/TinyLlama-1.1B-intermediate-step-1195k-token-2.5T --config configs/tinyllama_opt.json --output outputs/tinyllama-converted
 ```
 
 then, use the converted model to initialize the LCKV model:
