@@ -50,7 +50,7 @@ from transformers import (
     XLNetTokenizer,
 )
 from transformers.modeling_outputs import CausalLMOutputWithPast
-from models import OptLlamaForCausalLM, ClaLlamaForCausalLM
+from models import LCKVLlamaForCausalLM
 
 
 logging.basicConfig(
@@ -63,8 +63,7 @@ logger = logging.getLogger(__name__)
 MAX_LENGTH = int(10000)  # Hardcoded max length to avoid infinite loop
 
 MODEL_CLASSES = {
-    "opt-llama": (OptLlamaForCausalLM, LlamaTokenizer),
-    "cla-llama": (ClaLlamaForCausalLM, LlamaTokenizer),
+    "lckv-llama": (LCKVLlamaForCausalLM, LlamaTokenizer),
     "gpt2": (GPT2LMHeadModel, GPT2Tokenizer),
     "ctrl": (CTRLLMHeadModel, CTRLTokenizer),
     "openai-gpt": (OpenAIGPTLMHeadModel, OpenAIGPTTokenizer),

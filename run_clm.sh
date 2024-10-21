@@ -1,18 +1,4 @@
-
-export WANDB_PROJECT=LCKV-Llama-tiny
-echo "Start running..."
-echo "Slurm job id: $SLURM_JOB_ID"
-
-# improvement: huge
-export LCKV_FLASH_ATTN=1
-# improvement: significant
-export LCKV_FUSED_RMSNORM=1
-# improvement: none
-export LCKV_FUSED_CROSSENTROPY=1
-# improvement: none
-export LCKV_FUSED_ROTARY=1
-# improvement: slightly
-export LCKV_FUSED_SWIGLU=1
+#!/usr/bin/env bash
 
 ## pretrain code for llama-tiny
 #  - to pretrain a tinyllama, change the config to `TinyLlama/TinyLlama-1.1B-intermediate-step-955k-token-2T`
@@ -21,8 +7,8 @@ export LCKV_FUSED_SWIGLU=1
 #  - to enable wandb, use `--report_to wandb`
 accelerate launch run_clm.py \
     --tokenizer_name TinyLlama/TinyLlama-1.1B-intermediate-step-955k-token-2T \
-    --config_name configs/llama_tiny_opt.json \
-    --config_overrides model_type=opt-llama,num_encoders=8,num_trained_encoders=1,layer_types=0_1_1_1_1_1_2_0,target_layer=-2,train_kv=false \
+    --config_name configs/llama_tiny_lckv.json \
+    --config_overrides layer_types=0_6_6_6_6_6_6_7,forward_passes=7,backward_passes=2 \
     --dataset_name wikitext \
     --dataset_config_name wikitext-103-raw-v1 \
     --per_device_train_batch_size 32 \
@@ -47,17 +33,14 @@ accelerate launch run_clm.py \
     --load_best_model_at_end True \
     --metric_for_best_model eval_loss \
     --report_to none \
-    --run_name llamatiny-3090-test \
+    --run_name llamatiny-test \
     --overwrite_output_dir \
-    --output_dir outputs/llamatiny-3090-test
+    --output_dir outputs/llamatiny-test
 
-
-## uncomment to enable evaluation at token level (each token will only look at the last layer of the previous tokens)
-# export LCKV_INFERENCE=1
 
 ## eval code for llama-tiny
 python run_clm.py \
-    --model_name_or_path outputs/llamatiny-3090-test \
+    --model_name_or_path outputs/llamatiny-test \
     --tokenizer_name TinyLlama/TinyLlama-1.1B-intermediate-step-955k-token-2T \
     --dataset_name wikitext \
     --dataset_config_name wikitext-103-raw-v1 \

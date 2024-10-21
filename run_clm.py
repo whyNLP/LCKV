@@ -174,13 +174,15 @@ class ModelArguments:
         },
     )
 
-    def __post_init__(self):
-        # if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
-        #     raise ValueError(
-        #         "--config_overrides can't be used in combination with --config_name or --model_name_or_path"
-        #     )
-        
-        pass
+    attn_implementation: Optional[str] = field(
+        default="flash_attention_2",
+        metadata={
+            "help": (
+                "The attention implementation to use. By default the LCKV implementation uses flash attention implementation."
+            ),
+            "choices": ["eager", "flash_attention_2", "sdpa"],
+        },
+    )
 
 
 @dataclass
@@ -449,8 +451,6 @@ def main():
             "You are instantiating a new tokenizer from scratch. This is not supported by this script."
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
-    
-    use_flash_attention_2=os.environ.get('LCKV_FLASH_ATTN', False)
 
     if model_args.model_name_or_path:
         torch_dtype = (
@@ -468,7 +468,7 @@ def main():
             trust_remote_code=model_args.trust_remote_code,
             torch_dtype=torch_dtype,
             low_cpu_mem_usage=model_args.low_cpu_mem_usage,
-            use_flash_attention_2=use_flash_attention_2,
+            attn_implementation=model_args.attn_implementation,
         )
     else:
         torch_dtype = (
@@ -476,8 +476,7 @@ def main():
             if model_args.torch_dtype in ["auto", None]
             else getattr(torch, model_args.torch_dtype)
         )
-        if use_flash_attention_2:
-            config._flash_attn_2_enabled = True
+        config._attn_implementation = model_args.attn_implementation
         model = AutoModelForCausalLM.from_config(config, trust_remote_code=model_args.trust_remote_code, torch_dtype=torch_dtype)
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")

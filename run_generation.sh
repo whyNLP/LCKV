@@ -1,18 +1,10 @@
-# improvement: huge
-export LCKV_FLASH_ATTN=1
-# improvement: significant
-export LCKV_FUSED_RMSNORM=1
-# improvement: none
-export LCKV_FUSED_CROSSENTROPY=1
-# improvement: none
-export LCKV_FUSED_ROTARY=1 # comment it out if num_return_sequences > 1
-# improvement: slightly
-export LCKV_FUSED_SWIGLU=1
+#!/usr/bin/env bash
 
 python run_generation.py \
-    --model_type opt-llama \
+    --model_type lckv-llama \
     --torch_dtype bfloat16 \
-    --model_name_or_path outputs/llamatiny-3090-test \
+    --tokenizer_name TinyLlama/TinyLlama-1.1B-intermediate-step-955k-token-2T \
+    --model_name_or_path outputs/test-lckv \
     --num_return_sequences 1 \
     --prompt "the meaning of life is" \
     --length 100
