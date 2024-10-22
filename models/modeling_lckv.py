@@ -453,23 +453,24 @@ class LCKVLlamaForCausalLM(LlamaForCausalLM):
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        if past_key_values is not None:
+        if isinstance(past_key_values, Cache):
             if inputs_embeds is not None:  # Exception 1
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
             
-            # If we have gone beyond the current cache length, we need to crop the input attention mask.
-            total_length = attention_mask.shape[1]
-            # XXX: It seems that Cache.get_seq_length() will be deprecated and replaced by cache_position, but
-            # it is NOT consistent with cache_position
-            cur_cache_length = past_key_values.get_seq_length()
-            if (
-                cur_cache_length is not None
-                and attention_mask is not None
-                and total_length > cur_cache_length + input_ids.shape[1]
-            ):
-                attention_mask = attention_mask[:, -cur_cache_length - input_ids.shape[1] :]
+            if attention_mask is not None:
+                # If we have gone beyond the current cache length, we need to crop the input attention mask.
+                total_length = attention_mask.shape[1]
+                # XXX: It seems that Cache.get_seq_length() will be deprecated and replaced by cache_position, but
+                # it is NOT consistent with cache_position
+                cur_cache_length = past_key_values.get_seq_length()
+                if (
+                    cur_cache_length is not None
+                    and attention_mask is not None
+                    and total_length > cur_cache_length + input_ids.shape[1]
+                ):
+                    attention_mask = attention_mask[:, -cur_cache_length - input_ids.shape[1] :]
 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
