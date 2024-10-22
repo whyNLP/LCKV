@@ -188,6 +188,38 @@ bash run_clm.sh
 
 See the script for more details. For CLA, we also provide a sample training script `run_cla.sh`. For pretraining on SlimPajama, please follow the instructions in [tinyllama-zh](https://github.com/whyNLP/tinyllama-zh) and replace the dataset with SlimPajama.
 
+#### Initializing LCKV from a Pretrained Model
+
+We may initialize our LCKV model from a pretrained model. Most parts of the model structure are consistent with the standard transformer model and we can directly inherit the weights. For the KV weights of the target layer, we mainly have 2 options:
+
+##### Option 1: Directly Copy the Weights
+
+Simply add `--model_name_or_path` to the training script:
+
+```sh
+accelerate launch run_clm.py \
+    --model_name_or_path huggyllama/llama-7b \
+    ...
+```
+
+See the script `run_clm.sh` for more details.
+
+##### Option 2: Average the Weights from Multiple Layers
+
+Following [MLKV](http://arxiv.org/abs/2406.09297), we may average the weights from multiple layers to initialize the KV weights in the target layer. We provide a script `convert_pretrained.py` to convert the pretrained model to the LCKV model. You may run the following command:
+
+```sh
+python convert_pretrained.py --input TinyLlama/TinyLlama-1.1B-intermediate-step-1195k-token-2.5T --config configs/tinyllama_opt.json --output outputs/tinyllama-converted
+```
+
+then, use the converted model to initialize the LCKV model:
+
+```sh
+accelerate launch run_clm.py \
+    --model_name_or_path outputs/tinyllama-converted \
+    ...
+```
+
 ### Inference
 
 We use the same [inference script](https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-generation/run_generation.py) as the original `transformers` library. To perform inference, you may run the following command:
