@@ -1,12 +1,14 @@
-from pathlib import Path
-import json
 import argparse
-import models
-import lm_eval
+import json
+from pathlib import Path
 
 import datasets
-datasets.config.HF_DATASETS_TRUST_REMOTE_CODE = True
+import lm_eval
 
+import models
+
+
+datasets.config.HF_DATASETS_TRUST_REMOTE_CODE = True
 
 def main():
     parser = argparse.ArgumentParser()

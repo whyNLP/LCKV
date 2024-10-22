@@ -1,19 +1,21 @@
-import os
+import time
 from collections.abc import Iterable
+
+import torch
+from accelerate import PartialState
+from accelerate.utils import set_seed
+from tqdm import tqdm
 
 from models import LCKVLlamaConfig
 from transformers import (
-    AutoTokenizer,
     AutoConfig,
     AutoModelForCausalLM,
+    AutoTokenizer,
     logging,
 )
 from transformers.trainer_pt_utils import get_model_param_count
-from accelerate import PartialState
-from accelerate.utils import set_seed
-import torch
-import time
-from tqdm import tqdm
+
+
 set_seed(42)
 
 logging.get_logger("transformers.tokenization_utils").setLevel(logging.ERROR)
@@ -184,10 +186,10 @@ class BinarySearch:
         self.low = min
         self.high = None
         self.nxt = min + 1
-    
+
     def __iter__(self):
         return self
-    
+
     def __next__(self):
         if self.high is None:
             return self.nxt
@@ -195,7 +197,7 @@ class BinarySearch:
             raise StopIteration
         else:
             return self.nxt
-    
+
     def report(self, idx: int, result: bool):
         if self.high is None:
             if idx <= self.low:
@@ -223,7 +225,7 @@ class BinarySearch:
 class Streamer:
     def __init__(self, pbar):
         self.pbar = pbar
-    
+
     def put(self, x):
         self.pbar.update(1)
 
@@ -260,29 +262,31 @@ def get_ds_model(model_name, config, dtype, cpu_offload, disk_offload, offload_d
     }
 
     if cpu_offload:
-        ds_config["zero_optimization"]["offload_param"] = dict(
-            device="cpu", pin_memory=pin_memory)
+        ds_config["zero_optimization"]["offload_param"] = {
+            "device": "cpu",
+            "pin_memory": pin_memory
+        }
 
     if disk_offload:
-        ds_config["zero_optimization"]["offload_param"] = dict(
-            device="nvme",
-            pin_memory=True,
-            nvme_path=offload_dir,
-            buffer_count=5,
-            buffer_size=2 * (1 << 30),
-        )
+        ds_config["zero_optimization"]["offload_param"] = {
+            "device": "nvme",
+            "pin_memory": True,
+            "nvme_path": offload_dir,
+            "buffer_count": 5,
+            "buffer_size": 2 * (1 << 30),
+        }
         ds_config["aio"] = {
-          "block_size": 1048576,
-          "queue_depth": 8,
-          "thread_count": 1,
-          "single_submit": False,
-          "overlap_events": True,
+            "block_size": 1048576,
+            "queue_depth": 8,
+            "thread_count": 1,
+            "single_submit": False,
+            "overlap_events": True,
         }
 
     # dschf = HfDeepSpeedConfig(ds_config)
 
     model = AutoModelForCausalLM.from_pretrained(
-        model_name, 
+        model_name,
         config=config,
         torch_dtype=dtype
     )
@@ -376,14 +380,14 @@ def prepare(model: str, size: str, cpu_offload: str = "none", warmup: int = 2):
         start, end = int(warmup) // 2, config.num_hidden_layers - int(warmup) // 2
         layer_types = [(end - 1 if i in range(start, end) else i) for i in range(config.num_hidden_layers)]
         config.layer_types = "_".join(map(str, layer_types))
-    
+
     elif model == "llama":
         config = AutoConfig.from_pretrained(CONFIG_MAPPING[size])
         config._attn_implementation = "flash_attention_2"
 
     else:
         raise ValueError(f"Unknown model {model}")
-    
+
     # prepare model
     if cpu_offload == "none":
         model = AutoModelForCausalLM.from_config(config, torch_dtype=torch.bfloat16)
@@ -391,25 +395,25 @@ def prepare(model: str, size: str, cpu_offload: str = "none", warmup: int = 2):
 
     elif cpu_offload == "hf":
         model = get_hf_model(
-            model_name = CONFIG_MAPPING[size], 
+            model_name = CONFIG_MAPPING[size],
             config = config,
-            dtype = torch.bfloat16, 
+            dtype = torch.bfloat16,
             cpu_offload = True,
-            disk_offload = False, 
-            offload_dir = None, 
+            disk_offload = False,
+            offload_dir = None,
             num_gpus = 1
         )
-    
+
     elif cpu_offload == "ds":
         model = get_ds_model(
-            model_name = CONFIG_MAPPING[size], 
+            model_name = CONFIG_MAPPING[size],
             config = config,
-            dtype = torch.bfloat16, 
+            dtype = torch.bfloat16,
             cpu_offload = True,
-            disk_offload = False, 
+            disk_offload = False,
             offload_dir = None
         )
-    
+
     else:
         raise ValueError(f"Unknown CPU offload strategy {cpu_offload}")
 
@@ -423,12 +427,12 @@ def inject_callback(model, callback):
     """inject a callback into the model.
     """
     forward_func = model.forward
-    
+
     def forward(self, *args, **kwargs):
         result = forward_func(*args, **kwargs)
         callback()
         return result
-    
+
     model.forward = forward.__get__(model, type(model))
 
 
@@ -460,7 +464,7 @@ def experiment(tokenizer, model, prompt, max_new_tokens, iterator=None, verbose=
 
         start = time.time()
 
-        output_sequences = model.generate(
+        model.generate(
             input_ids=input_ids,
             max_new_tokens=max_new_tokens,
             temperature=1.0,
@@ -475,7 +479,7 @@ def experiment(tokenizer, model, prompt, max_new_tokens, iterator=None, verbose=
         end = time.time()
 
         return start, callback.timer, end
-    
+
     if isinstance(iterator, Iterable):
 
         for i in iterator:
@@ -490,7 +494,7 @@ def experiment(tokenizer, model, prompt, max_new_tokens, iterator=None, verbose=
                     raise
                 return
             empty_cache()
-    
+
     else:
 
         iterator = BinarySearch(0 if iterator is None else iterator)

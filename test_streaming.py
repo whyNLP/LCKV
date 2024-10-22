@@ -1,12 +1,15 @@
-import torch
-from tqdm import tqdm
+import argparse
 import os
+
+import torch
+from datasets import load_dataset
+from torch.nn import CrossEntropyLoss
+from tqdm import tqdm
+
 import models
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.cache_utils import SinkCache
-from datasets import load_dataset
-from torch.nn import CrossEntropyLoss
-import argparse
+
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -117,7 +120,7 @@ def main():
             seq_len = encodings.input_ids.size(1)
             print(f"num_eval_tokens: {num_eval_tokens}, seq_len: {seq_len}")
             pbar = tqdm(range(0, seq_len - 1))
-            
+
             # import time
             for idx in pbar:
                 # if idx == args.start_size + args.recent_size:

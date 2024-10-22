@@ -1,9 +1,11 @@
-from typing import List, Dict, Tuple, Optional, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
+
 from transformers.cache_utils import Cache, DynamicCache, SinkCache
 
 from .utils import LayerType
+
 
 class IndexedCache(Cache):
     """
@@ -16,7 +18,7 @@ class IndexedCache(Cache):
         self.value_cache: Dict[int, torch.Tensor] = {}
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         self._update = True # to prevent the cache from updating when inference with iterations
-    
+
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         """
         Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
@@ -34,14 +36,14 @@ class IndexedCache(Cache):
         """
         for layer_idx in sorted(self.key_cache.keys()):
             yield (self.key_cache[layer_idx], self.value_cache[layer_idx])
-    
+
     def __len__(self):
         """
         Support for backwards-compatible `past_key_value` length, e.g. `len(past_key_value)`. This value corresponds
         to the number of layers that compute KVs in the model.
         """
         return len(self.key_cache)
-    
+
     @property
     def min_layer(self) -> int:
         return min(self.key_cache.keys()) if len(self.key_cache) > 0 else None
@@ -83,7 +85,7 @@ class IndexedCache(Cache):
         else:
             new_key_states = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
             new_value_states = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
-        
+
         # Update the cache
         if self._update:
             self.key_cache[layer_idx] = new_key_states
@@ -338,7 +340,7 @@ class LayerCache(torch.nn.Module):
             # TODO: add a warning
             return
 
-        layers_to_init = set(self.layer_type.attends_to(idx) for idx in range(len(self.layer_type)) if self.layer_type.attends_to(idx) > idx)
+        layers_to_init = {self.layer_type.attends_to(idx) for idx in range(len(self.layer_type)) if self.layer_type.attends_to(idx) > idx}
 
         if layers_to_init:
             b, h, _, d = self.placeholder.size()
@@ -358,7 +360,7 @@ class LayerCache(torch.nn.Module):
             else:
                 key_states = torch.cat([self.placeholder, key_states], dim=1)
                 value_states = torch.cat([self.placeholder, value_states], dim=1)
-        
+
         return key_states, value_states
 
     def layer_set(self, layer_idx: int, key: torch.Tensor, value: torch.Tensor):
@@ -406,7 +408,7 @@ class AutoLayerCache(torch.nn.Module):
             f"{self.__class__.__name__} is designed to be instantiated "
             f"using the `{self.__class__.__name__}.from_cache(cache)` method."
         )
-    
+
     @classmethod
     def from_cache(cls, cache: Cache, *args, **kwargs):
         """

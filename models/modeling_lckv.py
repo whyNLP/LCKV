@@ -21,32 +21,26 @@
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
-from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.cache_utils import Cache, StaticCache
-from transformers.utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
-
+from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.models.llama.modeling_llama import (
-    LlamaModel,
-    LlamaForCausalLM,
+    LLAMA_INPUTS_DOCSTRING,
     LlamaDecoderLayer,
     LlamaFlashAttention2,
-    rotate_half,
+    LlamaForCausalLM,
+    LlamaModel,
     _prepare_4d_causal_attention_mask_with_cache_position,
-    LLAMA_INPUTS_DOCSTRING,
-    logger
+    logger,
+    rotate_half,
 )
+from transformers.utils import add_start_docstrings_to_model_forward
 
+from .cache_utils import AutoLayerCache, LayerCache
 from .configuration_lckv import LCKVLlamaConfig
 from .utils import IterStep, LayerType, flash_attention_forward
-from .cache_utils import LayerCache, AutoLayerCache
+
 
 def apply_rotary(q, cos, sin, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
@@ -219,7 +213,7 @@ class LCKVLlamaModel(LlamaModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        
+
         # build the cache object
         if not isinstance(past_key_values, LayerCache):
             placeholder = inputs_embeds.new_zeros(
@@ -237,7 +231,7 @@ class LCKVLlamaModel(LlamaModel):
                 raise NotImplementedError("Only DynamicCache is supported for now.")
 
             past_key_values.setup(self.layer_types, placeholder)
-        
+
         # initialize the cache
         past_key_values.initialize(inputs_embeds.shape[1])
 
@@ -294,7 +288,7 @@ class LCKVLlamaModel(LlamaModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-    
+
     def _iterate_layers(
         self,
         hidden_states: torch.Tensor,
@@ -355,16 +349,16 @@ class LCKVLlamaModel(LlamaModel):
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
-        
+
         next_cache = next_decoder_cache if use_cache else None
-        
+
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-    
+
     def _modeling_with_plan(
         self,
         hidden_states: torch.Tensor,
@@ -392,7 +386,7 @@ class LCKVLlamaModel(LlamaModel):
 
             if isinstance(past_key_values, Cache):
                 past_key_values._update = step.update
-            
+
             iteration_outputs = iteration_func(
                 hidden_states,
                 attention_mask=attention_mask,
@@ -415,10 +409,10 @@ class LCKVLlamaModel(LlamaModel):
 
             if output_attentions:
                 all_self_attns = all_self_attns[:end] + iteration_outputs.attentions
-            
+
             if use_cache:
                 next_decoder_cache = iteration_outputs.past_key_values
-        
+
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_decoder_cache,
@@ -458,7 +452,7 @@ class LCKVLlamaForCausalLM(LlamaForCausalLM):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
-            
+
             if attention_mask is not None:
                 # If we have gone beyond the current cache length, we need to crop the input attention mask.
                 total_length = attention_mask.shape[1]

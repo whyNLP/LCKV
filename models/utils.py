@@ -1,9 +1,10 @@
-from typing import List, Optional
 from dataclasses import dataclass
+from typing import List, Optional
 
 import torch
 
 from transformers.modeling_flash_attention_utils import _flash_attention_forward
+
 
 @dataclass
 class IterStep:
@@ -19,28 +20,28 @@ class LayerType:
 
         # parse the layer type
         self.layer_types = [int(x) for x in self._layer_type.split("_")]
-    
+
     def __len__(self):
         return len(self.layer_types)
-    
+
     def attends_to(self, layer_idx: int = None) -> int:
         """return the layer that the current layer attends to"""
         if layer_idx is None:
             layer_idx = self.layer_idx
         return self.layer_types[layer_idx]
-    
+
     def attends_top(self, layer_idx: int = None) -> bool:
         """whether the layer attends to layers above it"""
         if layer_idx is None:
             layer_idx = self.layer_idx
         return self.layer_types[layer_idx] > layer_idx
-    
+
     def computes_kv(self, layer_idx: int = None) -> bool:
         """whether the layer computes key-value pairs"""
         if layer_idx is None:
             layer_idx = self.layer_idx
         return layer_idx in self.layer_types
-    
+
     def iteration_plan(self, forward_passes: int = 7, backward_passes: int = 2) -> List[IterStep]:
         """
         Return a iteration plan for the layer types. The plan is a list of IterStep objects.
@@ -50,7 +51,7 @@ class LayerType:
         # if there is no cyclic dependency, return the default plan
         if True not in attends_top:
             return [IterStep()]
-        
+
         # otherwise, return the plan for the cyclic dependency
         low = attends_top.index(True)
         high = max([i for idx, i in enumerate(self.layer_types) if i > idx])
@@ -69,7 +70,7 @@ class LayerType:
             IterStep(slice(high + 1, None)),
         ]
         return plan
-    
+
     def check(self, num_hidden_layers: int):
         if len(self.layer_types) != num_hidden_layers:
             raise ValueError("The number of layer types should be equal to the number of hidden layers.")

@@ -613,7 +613,7 @@ def main():
             labels = labels[:, 1:].reshape(-1)
             preds = preds[:, :-1].reshape(-1)
             return metric.compute(predictions=preds, references=labels)
-    
+
     if training_args.do_predict:
         if "test" not in tokenized_datasets:
             raise ValueError("--do_predict requires a test dataset")
@@ -671,7 +671,7 @@ def main():
 
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
-    
+
     # Predict
     if training_args.do_predict:
         logger.info("*** Predict ***")

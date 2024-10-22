@@ -1,23 +1,16 @@
-import warnings
-warnings.filterwarnings("ignore")
-
-from pathlib import Path
-import requests
-
-import torch
 import argparse
 import json
 import os
+from pathlib import Path
+
+import requests
+import torch
 
 import models
-
+from transformers import AutoModelForCausalLM, AutoTokenizer, logging
 from transformers.cache_utils import SinkCache
 from transformers.generation.streamers import TextStreamer
-from transformers import (
-    AutoTokenizer,
-    AutoModelForCausalLM,
-    logging
-)
+
 
 logging.get_logger("transformers.tokenization_utils").setLevel(logging.ERROR)
 logging.get_logger("transformers.generation.utils").setLevel(logging.ERROR)
@@ -42,7 +35,7 @@ def main():
     )
     parser.add_argument("--k", type=int, default=0)
     parser.add_argument("--p", type=float, default=0.9)
-    
+
     # sink cache related arguments
     parser.add_argument("--sink_cache", action="store_true", help="Whether to use sink cache.")
     parser.add_argument("--window_length", type=int, default=256, help="Window size for sink cache.")
@@ -97,13 +90,13 @@ def main():
     kwargs = {}
     if args.sink_cache:
         kwargs["past_key_values"] = SinkCache(args.window_length, args.num_sink_tokens)
-    
+
     chat_history = []
     streamer = TextStreamer(tokenizer, skip_prompt=True)
     for prompt in prompts:
         new_prompt = {"role": "user", "content": prompt}
         print(tokenizer.apply_chat_template([new_prompt], add_generation_prompt=True, tokenize=False), end="")
-        
+
         chat_history.append(new_prompt)
         input_ids = tokenizer.apply_chat_template(chat_history, add_generation_prompt=True, return_tensors="pt").to(model.device)
 
