@@ -18,21 +18,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch LLaMA model."""
-import os
-import math
-import warnings
-from tqdm import trange
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from transformers.activations import ACT2FN
-from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
-from transformers.modeling_utils import PreTrainedModel
+from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.cache_utils import Cache, StaticCache
 from transformers.utils import (
     add_start_docstrings,
@@ -40,27 +32,21 @@ from transformers.utils import (
     logging,
     replace_return_docstrings,
 )
-from transformers.utils.import_utils import is_torch_fx_available
 
 from transformers.models.llama.modeling_llama import (
     LlamaModel,
     LlamaForCausalLM,
     LlamaDecoderLayer,
-    LlamaAttention,
     LlamaFlashAttention2,
-    LlamaMLP,
-    LlamaRMSNorm,
-    repeat_kv,
     rotate_half,
-    apply_rotary_pos_emb,
-    is_flash_attn_greater_or_equal_2_10,
     _prepare_4d_causal_attention_mask_with_cache_position,
     LLAMA_INPUTS_DOCSTRING,
     logger
 )
 
 from .configuration_lckv import LCKVLlamaConfig
-from .utils import IterStep, LayerType, LayerCache, AutoLayerCache, flash_attention_forward
+from .utils import IterStep, LayerType, flash_attention_forward
+from .cache_utils import LayerCache, AutoLayerCache
 
 def apply_rotary(q, cos, sin, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
