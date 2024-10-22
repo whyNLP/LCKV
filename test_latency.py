@@ -373,7 +373,7 @@ def prepare(model: str, size: str, cpu_offload: str = "none", warmup: int = 2):
     if model == "lckv-llama":
         config = LCKVLlamaConfig.from_pretrained(CONFIG_MAPPING[size])
         config._attn_implementation = "flash_attention_2"
-        start, end = warmup // 2, config.num_hidden_layers - warmup // 2
+        start, end = int(warmup) // 2, config.num_hidden_layers - int(warmup) // 2
         layer_types = [(end - 1 if i in range(start, end) else i) for i in range(config.num_hidden_layers)]
         config.layer_types = "_".join(map(str, layer_types))
     
