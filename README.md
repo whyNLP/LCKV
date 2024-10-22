@@ -33,114 +33,72 @@ You may install the dependencies with the following commands:
 
 ```sh
 conda install pytorch pytorch-cuda=12.1 -c pytorch -c nvidia
-pip install xformers --index-url https://download.pytorch.org/whl/cu121
 pip install -r requirements.txt
 ```
 
-where the CUDA version is set to `12.1`. For other CUDA versions, please refer to installation instructions of [PyTorch](https://pytorch.org/get-started/locally/) and [xFormers](https://github.com/facebookresearch/xformers). See [Trouble shooting](#trouble-shooting) for more details.
+where the CUDA version is set to `12.1`. For other CUDA versions, please refer to installation instructions of [PyTorch](https://pytorch.org/get-started/locally/). See [Trouble shooting](#trouble-shooting) for more details.
 
 ## Usage
 
-Our implementation is based on HuggingFace `transformers`. We register a new model `opt-llama` that supports the Layer-Condensed KV Cache, and a new model `cla-llama` that supports CLA. Both of them are variants of transformer `llama` models.
+Our implementation is based on HuggingFace `transformers`. We register a new model `lckv-llama` that supports the Layer-Condensed KV Cache. It inherits from the `llama` model and adds support for the Layer-Condensed KV Cache.
+
+> [!NOTE]
+> It is difficult to support the Layer-Condensed KV Cache for a variety of models with a small amount of code. This is because the Layer-Condensed KV Cache requires to modify the attention mechanism and training recipe of the transformer decoder. Currently, we only implemented the Layer-Condensed KV Cache for the `llama` model, and it is possible to extend it to other models with similar structures.
 
 ```python
-import models # register the opt-llama and cla-llama model
+import models # register the lckv-llam model
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
-model = AutoModelForCausalLM.from_config(config="configs/tinyllama_opt.json")
+model = AutoModelForCausalLM.from_config(config="configs/tinyllama_lckv.json")
 ```
 
 and now you have a randomly initialized model with the Layer-Condensed KV Cache.
 
 ### Optimization
 
-We follows all the acceleration tricks in [tinyllama](https://github.com/jzhang38/TinyLlama), with the minimal modification to the huggingface transformers code. So we may train the model with [huggingface trainer](https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_clm.py) with the training speed comparable to the original tinyllama code.
+To accelerate the training and inference of the model, one could apply the liger kernel supported by `transformers` library. See more details [here](https://huggingface.co/docs/transformers/v4.45.2/en/trainer#liger-kernel).
 
-To enable the optimization, add the following environment variable before running the training script:
-
-```sh
-# improvement: huge
-export LCKV_FLASH_ATTN=1
-# improvement: significant
-export LCKV_FUSED_RMSNORM=1
-# improvement: none
-export LCKV_FUSED_CROSSENTROPY=1
-# improvement: none
-export LCKV_FUSED_ROTARY=1
-# improvement: slightly
-export LCKV_FUSED_SWIGLU=1
-```
-
-We've done this for you in the provided training scripts. You may also refer to my [tinyllama](https://github.com/whyNLP/tinyllama) repo for a pure PyTorch implementation for the Llama model.
+> [!NOTE]
+> The rotary embedding is not supported in the current implementation. We are working on integrating the rotary embedding kernel with the Layer-Condensed KV Cache.
 
 ### Configuration
 
-We provide some sample configuration files in the  `configs` folder. The config settings are defined in [models/configuration_llama.py](models/configuration_llama.py). You may refer to this file for more details.
+We provide some sample configuration files in the  `configs` folder. The config settings are defined in [models/configuration_lckv.py](models/configuration_lckv.py). You may refer to this file for more details.
 
-#### Layer-Condensed KV Cache (LCKV)
-
-Option 1: Modify the configurations in python:
+#### Option 1: Modify the configurations in python:
 
 ```python
-from models import OptLlamaConfig
+from models import LCKVLlamaConfig
 
 # we have prepared a sample configuration file
-config = OptLlamaConfig.from_pretrained("configs/tinyllama_opt.json")
+config = LCKVLlamaConfig.from_pretrained("configs/tinyllama_lckv.json")
 
 # you may modify the configuration as you like
-config.num_trained_encoders = 1      # see figure below, b-1 in the paper
-config.num_encoders         = 8      # see figure below, m+b-1 in the paper
-config.layer_types          = "0_1_1_1_1_1_1_1_1_1_1_1_1_1_1_1_1_1_1_1_2_0" # 0: std tsfm layer; 1: layers use top layer KVs; 2: layers generate the key-value pair for other layers to use
-config.target_layer         = -2     # the layer to generate the key-value pair for other layers to use
-config.train_kv             = False  # add MSE loss for the key-value pair, see paper appendix
+config.forward_passes  = 7      # m in the paper
+config.backward_passes = 2      # m+b-1 in the paper
+config.layer_types     = "0_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_21" # for each layer, which layer to attend to
 
 # we also supports this
-config.layer_types          = "0_0_0_0_0_0_0_0_0_0_2_1_1_1_1_1_1_1_1_1_1_1" # YOCO config.
-config.layer_types          = "0_0_0_0_0_0_0_0_0_0_1_1_1_1_1_1_2_1_1_1_1_1" # 2 does not necessarily have to be the last layer
+config.layer_types          = "0_0_0_0_0_0_0_0_0_0_10_10_10_10_10_10_10_10_10_10_10_10" # YOCO config
+config.layer_types          = "0_0_2_2_4_4_6_6_8_8_10_10_12_12_14_14_16_16_18_18_20_20" # CLA config
 ```
 
-Option 2: Modify the configurations in the shell script (via `--config_overrides`):
+#### Option 2: Modify the configurations in the shell script (via `--config_overrides`):
 
 ```sh
 accelerate launch run_clm.py \
-    --config_name configs/tinyllama_opt.json \
-    --config_overrides model_type=opt-llama,num_encoders=8,num_trained_encoders=1,layer_types=0_1_1_1_1_1_2_0,target_layer=-2,train_kv=false \
+    --config_name configs/tinyllama_lckv.json \
+    --config_overrides forward_passes=7,backward_passes=2,layer_types=0_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_21 \
     ...
 ```
 
-Notice that some of the settings have different names and meanings compared to that in our paper. The following figure explains the correspondence:
-
-<div align="center">
-<img width="500" src="https://github.com/whyNLP/LCKV/assets/43395692/74671862-146f-492c-8d17-d0e6a7697170" />
-</div>
-
-#### Cross-Layer Attention (CLA)
-
-Option 1: Modify the configurations in python:
-
-```python
-from models import ClaLlamaConfig
-
-# we have prepared a sample configuration file
-config = ClaLlamaConfig.from_pretrained("configs/tinyllama_cla.json")
-
-# you may modify the configuration as you like
-config.layer_types          = "2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1" # CLA-2, similar to LCKV, "1" uses the KVs from the nearest previous layer
-config.layer_types          = "0_2_1_1_2_1_1_2_1_1_2_1_1_2_1_1_2_1_1_2_1_1" # CLA-3, also supports "0"
-```
-
-Option 2: Modify the configurations in the shell script (via `--config_overrides`):
-
-```sh
-accelerate launch run_clm.py \
-    --config_name configs/tinyllama_cla.json \
-    --config_overrides layer_types=2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1_2_1 \
-    ...
-```
+With the above configurations, you can create [CLA](http://arxiv.org/abs/2405.12981) or [YOCO](https://arxiv.org/abs/2405.05254) models without changing the code. The only thing you need to do is to write the correct `layer_types` in the configuration file.
 
 > [!WARNING]
 > The authors of CLA tuned the hyperparameters of the model architecture and training settings for the CLA model. The provided configuration files are not the optimal settings for the CLA model. You may need to change the hyperparameters for the CLA model, such as `intermediate_size`, `num_key_value_heads`, etc.
+> 
+> YOCO also uses efficient self-attention mechanisms. The current implementation does not support this yet.
 
 ### Training
 
@@ -152,7 +110,7 @@ We provide a training script `run_clm.sh` for training a 50M parameter model on 
 bash run_clm.sh
 ```
 
-See the script for more details. For CLA, we also provide a sample training script `run_cla.sh`. For pretraining on SlimPajama, please follow the instructions in [tinyllama-zh](https://github.com/whyNLP/tinyllama-zh) and replace the dataset with SlimPajama.
+See the script for more details. For pretraining on SlimPajama, please follow the instructions in [tinyllama-zh](https://github.com/whyNLP/tinyllama-zh) and replace the dataset with SlimPajama.
 
 ### Inference
 
@@ -164,7 +122,7 @@ bash run_generation.sh
 
 You may get responses from the trained model given any prompts. See the script for more details.
 
-### Streaming
+#### Streaming
 
 We integrate our model with [StreamingLLM](https://github.com/mit-han-lab/streaming-llm). To perform streaming inference, you may run the following command:
 
@@ -172,17 +130,17 @@ We integrate our model with [StreamingLLM](https://github.com/mit-han-lab/stream
 bash run_streaming.sh
 ```
 
-See the script for more details. The [codes](test_streaming.py) follow the [official implementation](https://github.com/mit-han-lab/streaming-llm/blob/main/examples/eval_long_ppl.py) with minimal modification.
+See the script for more details. The `run_generation.py` script also supports streaming inference with the `--sink_cache` flag.
 
 ### Evaluation
 
 We use [LM-Harness](https://github.com/EleutherAI/lm-evaluation-harness) to evaluate the model. You may run the following command:
 
 ```sh
-python test_harness.py
+python test_harness.py --model_name_or_path ...
 ```
 
-Change the `model_args` and `tasks` in the script to evaluate different models and datasets.
+with the path to the model checkpoint. Run `python test_harness.py --help` for more details.
 
 ### Latency Testing
 
@@ -217,24 +175,14 @@ FLASH_ATTENTION_FORCE_BUILD=TRUE pip install flash-attn
 The cuda version may affect the installation of:
 - [PyTorch](https://pytorch.org/get-started/locally/)
 - [Flash-Attn](https://github.com/Dao-AILab/flash-attention)
-- [xFormers](https://github.com/facebookresearch/xformers)
 
 Please make sure to install the correct version of the packages (so long as they are consistent, the code would work). Also make sure that `nvcc` is installed and available in the path.
 
 Our experiment environment uses `CUDA 12.1` and you may install with
 ```sh
-conda install pytorch==2.1.0 pytorch-cuda=12.1 -c pytorch -c nvidia
-pip install xformers==0.0.22.post7 --index-url https://download.pytorch.org/whl/cu121
+conda install pytorch==2.5.0 pytorch-cuda=12.1 -c pytorch -c nvidia
 pip install -r requirements.txt
 ```
-
-### The performance is incredibly poor
-
-Some users have reported that the model's performance is incredibly poor and the loss does not decrease when using `torch_dtype=bfloat16` (requried by flash attention). This issue seems to be related to precision problems. Although I have not been able to reproduce this issue, a potential solution could be to use a larger learning rate. To confirm whether the issue is indeed related to precision, one could disable flash attention and use float32 instead. If the loss decreases as expected, then it is likely that the issue is related to precision.
-
-### The code always raises exceptions
-
-Since we start the project very early, this code base uses an old version of `transformers` (v.4.35.2). Newer versions may not be compatible with the code (I think some minor changes would fix the issue).
 
 
 ## Questions
