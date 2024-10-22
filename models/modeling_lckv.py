@@ -33,7 +33,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from transformers.activations import ACT2FN
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from transformers.modeling_utils import PreTrainedModel
-from transformers.cache_utils import Cache, DynamicCache
+from transformers.cache_utils import Cache, StaticCache
 from transformers.utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -54,12 +54,13 @@ from transformers.models.llama.modeling_llama import (
     rotate_half,
     apply_rotary_pos_emb,
     is_flash_attn_greater_or_equal_2_10,
+    _prepare_4d_causal_attention_mask_with_cache_position,
     LLAMA_INPUTS_DOCSTRING,
     logger
 )
 
 from .configuration_lckv import LCKVLlamaConfig
-from .utils import LayerType, LayerCache, AutoLayerCache, flash_attention_forward
+from .utils import IterStep, LayerType, LayerCache, AutoLayerCache, flash_attention_forward
 
 def apply_rotary(q, cos, sin, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
@@ -271,7 +272,7 @@ class LCKVLlamaModel(LlamaModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # we need to do forward passes based on a plan if the input is a prompt
-        plan = self.prompt_plan if inputs_embeds.shape[1] > 1 else [(slice(None), True)]
+        plan = self.prompt_plan if inputs_embeds.shape[1] > 1 else [IterStep()]
 
         iteration_outputs = self._modeling_with_plan(
             hidden_states,
@@ -389,7 +390,7 @@ class LCKVLlamaModel(LlamaModel):
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         output_hidden_states: Optional[bool] = False,
-        modeling_plan: List[Tuple[slice, bool]] = None,
+        modeling_plan: List[IterStep] = None,
     ) -> BaseModelOutputWithPast:
         """
         Given a plan, iteratively update the hidden states.
@@ -399,17 +400,15 @@ class LCKVLlamaModel(LlamaModel):
         all_self_attns = () if output_attentions else None
         next_decoder_cache = None
 
-        hidden_states_cache = {
-            0: hidden_states
-        }
+        for step in modeling_plan:
+            end = len(self.layers) if step.layer_slice.stop is None else step.layer_slice.stop
+            iteration_func = self._iterate_layers if step.requires_grad else torch.no_grad()(self._iterate_layers)
 
-        for slice_idx, requires_grad in modeling_plan:
-            start = 0 if slice_idx.start is None else slice_idx.start
-            end = len(self.layers) if slice_idx.stop is None else slice_idx.stop
-            iteration_func = self._iterate_layers if requires_grad else torch.no_grad()(self._iterate_layers)
+            if isinstance(past_key_values, Cache):
+                past_key_values._update = step.update
             
             iteration_outputs = iteration_func(
-                hidden_states_cache[start],
+                hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
@@ -418,11 +417,12 @@ class LCKVLlamaModel(LlamaModel):
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 output_hidden_states=output_hidden_states,
-                layer_slice=slice_idx
+                layer_slice=step.layer_slice
             )
 
             # Update the hidden states cache
-            hidden_states_cache[end] = iteration_outputs.last_hidden_state
+            if step.update:
+                hidden_states = iteration_outputs.last_hidden_state
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states[:end] + iteration_outputs.hidden_states
@@ -434,7 +434,7 @@ class LCKVLlamaModel(LlamaModel):
                 next_decoder_cache = iteration_outputs.past_key_values
         
         return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states_cache[len(self.layers)],
+            last_hidden_state=hidden_states,
             past_key_values=next_decoder_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
@@ -450,3 +450,90 @@ class LCKVLlamaForCausalLM(LlamaForCausalLM):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
+        position_ids=None,
+        use_cache=True,
+        num_logits_to_keep=None,
+        **kwargs,
+    ):
+        """fix this function to handle sink cache"""
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        if past_key_values is not None:
+            if inputs_embeds is not None:  # Exception 1
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+                input_ids = input_ids[:, cache_position]
+            
+            # If we have gone beyond the current cache length, we need to crop the input attention mask.
+            total_length = attention_mask.shape[1]
+            # XXX: It seems that Cache.get_seq_length() will be deprecated and replaced by cache_position, but
+            # it is NOT consistent with cache_position
+            cur_cache_length = past_key_values.get_seq_length()
+            if (
+                cur_cache_length is not None
+                and attention_mask is not None
+                and total_length > cur_cache_length + input_ids.shape[1]
+            ):
+                attention_mask = attention_mask[:, -cur_cache_length - input_ids.shape[1] :]
+
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -input_ids.shape[1] :]
+
+                # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
+                position_ids = position_ids.clone(memory_format=torch.contiguous_format)
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and cache_position[0] == 0:
+            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
+        else:
+            # The clone here is for the same reason as for `position_ids`.
+            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
+
+        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
+            if model_inputs["inputs_embeds"] is not None:
+                batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
+                device = model_inputs["inputs_embeds"].device
+            else:
+                batch_size, sequence_length = model_inputs["input_ids"].shape
+                device = model_inputs["input_ids"].device
+
+            dtype = self.lm_head.weight.dtype
+            min_dtype = torch.finfo(dtype).min
+
+            attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(
+                attention_mask,
+                sequence_length=sequence_length,
+                target_length=past_key_values.get_max_length(),
+                dtype=dtype,
+                device=device,
+                min_dtype=min_dtype,
+                cache_position=cache_position,
+                batch_size=batch_size,
+            )
+
+        if num_logits_to_keep is not None:
+            model_inputs["num_logits_to_keep"] = num_logits_to_keep
+
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "attention_mask": attention_mask,
+            }
+        )
+        return model_inputs

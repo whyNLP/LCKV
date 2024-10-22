@@ -7,4 +7,6 @@ python run_generation.py \
     --model_name_or_path outputs/test-lckv \
     --num_return_sequences 1 \
     --prompt "the meaning of life is" \
-    --length 100
+    --length 100 \
+    --sink_cache \
+    --window_length 20

@@ -50,6 +50,7 @@ from transformers import (
     XLNetTokenizer,
 )
 from transformers.modeling_outputs import CausalLMOutputWithPast
+from transformers.cache_utils import SinkCache
 from models import LCKVLlamaForCausalLM
 
 
@@ -354,6 +355,12 @@ def main():
             "Override the default `torch.dtype` and load the model under this dtype. If `auto` is passed, the "
             "dtype will be automatically derived from the model's weights."
     ), choices=["auto", "bfloat16", "float16", "float32"])
+
+    # sink cache related arguments
+    parser.add_argument("--sink_cache", action="store_true", help="Whether to use sink cache.")
+    parser.add_argument("--window_length", type=int, default=256, help="Window size for sink cache.")
+    parser.add_argument("--num_sink_tokens", type=int, default=2, help="Number of sink tokens.")
+
     args = parser.parse_args()
 
     # Initialize the distributed state.
@@ -445,6 +452,10 @@ def main():
 
         model = _ModelFallbackWrapper(traced_model, model)
 
+    kwargs = {}
+    if args.sink_cache:
+        kwargs["past_key_values"] = SinkCache(args.window_length, args.num_sink_tokens)
+
     output_sequences = model.generate(
         input_ids=input_ids,
         max_length=args.length + len(encoded_prompt[0]),
@@ -454,6 +465,7 @@ def main():
         repetition_penalty=args.repetition_penalty,
         do_sample=True,
         num_return_sequences=args.num_return_sequences,
+        **kwargs,
     )
 
     # Remove the batch dimension when returning multiple sequences
