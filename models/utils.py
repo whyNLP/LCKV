@@ -14,6 +14,15 @@ class IterStep:
     update: bool = True
 
 class LayerType:
+    """
+    A helper class to parse the layer type string and provide some useful methods.
+
+    >>> layer_type = LayerType("0_0_0_5_5_5_8_8_8")
+    >>> layer_type.attends_to(3)
+    5
+    >>> layer_type.attends_top(3)
+    True
+    """
     def __init__(self, layer_type: str, layer_idx: int = None):
         self._layer_type = layer_type
         self.layer_idx = layer_idx
