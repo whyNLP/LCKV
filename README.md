@@ -23,6 +23,10 @@ This work is inspired by [Probabilistic Transformer](https://github.com/whyNLP/P
 </details>
 
 ## News
+
+> [!NOTE]
+> We are currently developing a new version of the code base at the [main branch](https://github.com/whyNLP/LCKV/tree/main). It will be compatible with the latest version of the `transformers` library and will be more user-friendly. The current branch will no longer be updated and it should only be used for reproduction purposes.
+
 - [24/10/18] Our new empirical study "[A Systematic Study of Cross-Layer KV Sharing for Efficient LLM Inference](http://arxiv.org/abs/2410.14442)" has released on arXiv. A new configuration has been found to be more efficient than the original LCKV.
 - [24/05/28] This code base now also supports Cross-Layer Attention (CLA). The idea is similar, but they 1) devide the transformer layers into small groups with 2-4 layers in each group; 2) pairs the queries of all the layers with the keys and values of the bottom layer in each group. See details in their paper "[Reducing Transformer Key-Value Cache Size with Cross-Layer Attention](http://arxiv.org/abs/2405.12981)".
 - [24/05/20] LCKV initial code release. 
