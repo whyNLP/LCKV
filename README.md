@@ -23,6 +23,10 @@ This work is inspired by [Probabilistic Transformer](https://github.com/whyNLP/P
 </details>
 
 ## News
+
+> [!WARNING]
+> This branch is under active development. The code may not work in the way exactly the same as that in the paper. Please refer to the [published branch](https://github.com/whyNLP/LCKV/tree/dev-lckv-publish) for reproduction purposes.
+
 - [24/10/18] Our new empirical study "[A Systematic Study of Cross-Layer KV Sharing for Efficient LLM Inference](http://arxiv.org/abs/2410.14442)" has released on arXiv. A new configuration has been found to be more efficient than the original LCKV.
 - [24/05/28] This code base now also supports Cross-Layer Attention (CLA). The idea is similar, but they 1) devide the transformer layers into small groups with 2-4 layers in each group; 2) pairs the queries of all the layers with the keys and values of the bottom layer in each group. See details in their paper "[Reducing Transformer Key-Value Cache Size with Cross-Layer Attention](http://arxiv.org/abs/2405.12981)".
 - [24/05/20] LCKV initial code release. 
@@ -46,7 +50,7 @@ Our implementation is based on HuggingFace `transformers`. We register a new mod
 > It is difficult to support the Layer-Condensed KV Cache for a variety of models with a small amount of code. This is because the Layer-Condensed KV Cache requires to modify the attention mechanism and training recipe of the transformer decoder. Currently, we only implemented the Layer-Condensed KV Cache for the `llama` model, and it is possible to extend it to other models with similar structures.
 
 ```python
-import models # register the lckv-llam model
+import models # register the lckv-llama model
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
@@ -96,9 +100,7 @@ accelerate launch run_clm.py \
 With the above configurations, you can create [CLA](http://arxiv.org/abs/2405.12981) or [YOCO](https://arxiv.org/abs/2405.05254) models without changing the code. The only thing you need to do is to write the correct `layer_types` in the configuration file.
 
 > [!WARNING]
-> The authors of CLA tuned the hyperparameters of the model architecture and training settings for the CLA model. The provided configuration files are not the optimal settings for the CLA model. You may need to change the hyperparameters for the CLA model, such as `intermediate_size`, `num_key_value_heads`, etc.
-> 
-> YOCO also uses efficient self-attention mechanisms. The current implementation does not support this yet.
+> YOCO uses efficient self-attention mechanisms. The current implementation does not support this yet.
 
 ### Training
 
