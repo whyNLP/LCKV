@@ -76,12 +76,12 @@ config = LCKVLlamaConfig.from_pretrained("configs/tinyllama_lckv.json")
 
 # you may modify the configuration as you like
 config.forward_passes  = 7      # m in the paper
-config.backward_passes = 2      # m+b-1 in the paper
+config.backward_passes = 2      # b in the paper
 config.layer_types     = "0_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_21" # for each layer, which layer to attend to
 
 # we also supports this
-config.layer_types          = "0_0_0_0_0_0_0_0_0_0_10_10_10_10_10_10_10_10_10_10_10_10" # YOCO config
-config.layer_types          = "0_0_2_2_4_4_6_6_8_8_10_10_12_12_14_14_16_16_18_18_20_20" # CLA config
+config.layer_types     = "0_0_0_0_0_0_0_0_0_0_10_10_10_10_10_10_10_10_10_10_10_10" # YOCO config
+config.layer_types     = "0_0_2_2_4_4_6_6_8_8_10_10_12_12_14_14_16_16_18_18_20_20" # CLA config
 ```
 
 #### Option 2: Modify the configurations in the shell script (via `--config_overrides`):
