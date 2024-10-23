@@ -106,7 +106,9 @@ def flash_attention_forward(
     prune_query = False
     if no_diag:
         if key_states.size(1) == 1:
-            return torch.zeros_like(query_states)
+            b, l, _, d = value_states.size()
+            _, _, h, _ = query_states.size()
+            return value_states.new_zeros((b, l, h, d))
 
         if key_states.size(1) == query_states.size(1):
             prune_query = True
