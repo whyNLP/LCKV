@@ -1,19 +1,19 @@
 {
   "_name_or_path": "meta-llama/Llama-2-7b-hf",
   "architectures": [
-    "LlamaForCausalLM"
+    "LCKVLlamaForCausalLM"
   ],
   "bos_token_id": 1,
   "eos_token_id": 2,
   "hidden_act": "silu",
-  "hidden_size": 2048,
+  "hidden_size": 768,
   "initializer_range": 0.02,
-  "intermediate_size": 5632,
-  "max_position_embeddings": 2048,
-  "model_type": "llama",
-  "num_attention_heads": 32,
-  "num_hidden_layers": 22,
-  "num_key_value_heads": 4,
+  "intermediate_size": 2048,
+  "max_position_embeddings": 1024,
+  "model_type": "lckv-llama",
+  "num_attention_heads": 12,
+  "num_hidden_layers": 12,
+  "num_key_value_heads": 6,
   "pretraining_tp": 1,
   "rms_norm_eps": 1e-05,
   "rope_scaling": null,
@@ -21,5 +21,8 @@
   "torch_dtype": "float32",
   "transformers_version": "4.31.0.dev0",
   "use_cache": true,
-  "vocab_size": 32000
+  "vocab_size": 32000,
+  "layer_types": "0_10_10_10_10_10_10_10_10_10_10_11",
+  "forward_passes": 7,
+  "backward_passes": 2
 }
