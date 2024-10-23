@@ -60,7 +60,7 @@ and now you have a randomly initialized model with the Layer-Condensed KV Cache.
 To accelerate the training and inference of the model, one could apply the liger kernel supported by `transformers` library. See more details [here](https://huggingface.co/docs/transformers/v4.45.2/en/trainer#liger-kernel).
 
 > [!NOTE]
-> The rotary embedding is not supported in the current implementation. We are working on integrating the rotary embedding kernel with the Layer-Condensed KV Cache.
+> The liger kernel of rotary embedding is not supported in the current implementation. We are working on integrating the rotary embedding liger kernel with the Layer-Condensed KV Cache.
 
 ### Configuration
 
