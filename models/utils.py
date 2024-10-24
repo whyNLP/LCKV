@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -17,39 +18,59 @@ class LayerType:
     """
     A helper class to parse the layer type string and provide some useful methods.
 
-    >>> layer_type = LayerType("0_0_0_5_5_5_8_8_8")
+    Arguments:
+        layer_type (str): A string of integers separated by underscores. The i-th integer
+            means the layer will use the key-value pair in the i-th layer as the kv cache.
+            Special characters may be placed after the integers:
+            - `s` means the layer will use sliding window attention.
+        layer_idx (int, optional): The index of the current layer.
+
+    >>> layer_type = LayerType("0_0_0_5s_5s_5s_8_8_8")
     >>> layer_type.attends_to(3)
     5
     >>> layer_type.attends_top(3)
     True
+    >>> layer_type.use_sliding_window(3)
+    True
     """
-    def __init__(self, layer_type: str, layer_idx: int = None):
+    def __init__(self, layer_type: str, layer_idx: Optional[int] = None):
         self._layer_type = layer_type
         self.layer_idx = layer_idx
 
         # parse the layer type
-        self.layer_types = [int(x) for x in self._layer_type.split("_")]
+        self.layer_indices = []
+        self.sliding_window = []
+        for s in layer_type.split("_"):
+            layer_idx, sliding_window = re.match(r"(\d+)(s)?", s).groups()
+            self.layer_indices.append(int(layer_idx))
+            self.sliding_window.append(bool(sliding_window))
 
     def __len__(self):
-        return len(self.layer_types)
+        return len(self.layer_indices)
+
+    def use_sliding_window(self, layer_idx: int = None) -> bool:
+        """whether the layer uses sliding window attention"""
+        if layer_idx is None:
+            layer_idx = self.layer_idx
+        return self.sliding_window[layer_idx]
 
     def attends_to(self, layer_idx: int = None) -> int:
         """return the layer that the current layer attends to"""
         if layer_idx is None:
             layer_idx = self.layer_idx
-        return self.layer_types[layer_idx]
+        return self.layer_indices[layer_idx]
 
     def attends_top(self, layer_idx: int = None) -> bool:
         """whether the layer attends to layers above it"""
         if layer_idx is None:
             layer_idx = self.layer_idx
-        return self.layer_types[layer_idx] > layer_idx
+        return self.layer_indices[layer_idx] > layer_idx
 
     def computes_kv(self, layer_idx: int = None) -> bool:
         """whether the layer computes key-value pairs"""
         if layer_idx is None:
             layer_idx = self.layer_idx
-        return layer_idx in self.layer_types
+        return layer_idx in self.layer_indices
 
     def iteration_plan(self, forward_passes: int = 7, backward_passes: int = 2) -> List[IterStep]:
         """
@@ -63,7 +84,7 @@ class LayerType:
 
         # otherwise, return the plan for the cyclic dependency
         low = attends_top.index(True)
-        high = max([i for idx, i in enumerate(self.layer_types) if i > idx])
+        high = max([i for idx, i in enumerate(self.layer_indices) if i > idx])
         plan = [
             # warmup step
             IterStep(slice(low)),
@@ -81,13 +102,13 @@ class LayerType:
         return plan
 
     def check(self, num_hidden_layers: int):
-        if len(self.layer_types) != num_hidden_layers:
+        if len(self.layer_indices) != num_hidden_layers:
             raise ValueError("The number of layer types should be equal to the number of hidden layers.")
         for i in range(num_hidden_layers):
-            if self.layer_types[i] not in range(num_hidden_layers):
+            if self.layer_indices[i] not in range(num_hidden_layers):
                 raise ValueError("The layer type should be in the range of the number of hidden layers.")
             # TODO: manually solve the dependency
-            if self.layer_types[i] != self.layer_types[self.layer_types[i]]:
+            if self.layer_indices[i] != self.layer_indices[self.layer_indices[i]]:
                 raise ValueError("The layer should only attends to the layers that attends to itself.")
 
 
@@ -125,6 +146,9 @@ def flash_attention_forward(
 
         key_states = key_states[:, :-1, :, :]
         value_states = value_states[:, :-1, :, :]
+
+        if sliding_window is not None:
+            sliding_window = sliding_window - 1
 
     result: torch.Tensor = _flash_attention_forward(
         query_states=query_states,

@@ -56,6 +56,7 @@ class LCKVLlamaAttention(LlamaFlashAttention2):
     def __init__(self, config: LCKVLlamaConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
         self.layer_type = LayerType(config.layer_types, layer_idx)
+        self.sliding_window = config.sliding_window if self.layer_type.use_sliding_window() else None
 
         # Some layers may not need to compute key-value pairs
         if not self.layer_type.computes_kv():
@@ -150,7 +151,7 @@ class LCKVLlamaAttention(LlamaFlashAttention2):
             q_len,
             position_ids=position_ids,
             dropout=dropout_rate,
-            sliding_window=getattr(self, "sliding_window", None),
+            sliding_window=self.sliding_window,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
             no_diag=self.layer_type.attends_top(),

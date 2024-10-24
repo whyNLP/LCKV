@@ -29,9 +29,10 @@ class LCKVLlamaConfig(LlamaConfig):
 
     def __init__(
         self,
+        layer_types: str = None,
         forward_passes: int = 7,
         backward_passes: int = 2,
-        layer_types: str = None,
+        sliding_window: int = 4096,
         **kwargs,
     ):
         """
@@ -40,22 +41,27 @@ class LCKVLlamaConfig(LlamaConfig):
         training scheme.
 
         Args:
+            layer_types (`str`, *optional*):
+                A string of integers separated by underscores. The i-th integer means the layer
+                will use the key-value pair in the i-th layer as the kv cache. Special characters
+                may be placed after the integers:
+                - `s` means the layer will use sliding window attention.
+                The default value is "0_1_2_..." till the number of layers in the current config.
             forward_passes (`int`, *optional*, defaults to 7):
                 The number of forward passes during training and prompt encoding. Equivlent
                 to `m` in the paper.
             backward_passes (`int`, *optional*, defaults to 2):
                 The number of backward passes during training and prompt encoding. Equivlent
                 to `b` in the paper.
-            layer_types (`str`, *optional*):
-                The type of each layer. The value should be a underscore separated string
-                of integers. The value i means the layer will use the key-value pair in
-                the i-th layer as the kv cache. The default value is "0_1_2_..." till the
-                number of layers in the current config.
+            sliding_window (`int`, *optional*, defaults to 4096):
+                Sliding window attention window size. If not specified, will default to `4096`.
+                It will only be effective if the corresponding layer uses sliding window attention.
         """
         super().__init__(**kwargs)
+        self.layer_types = layer_types
         self.forward_passes = forward_passes
         self.backward_passes = backward_passes
-        self.layer_types = layer_types
+        self.sliding_window = sliding_window
 
         if self.layer_types is None:
             self.layer_types = "_".join(map(str, range(self.num_hidden_layers)))
