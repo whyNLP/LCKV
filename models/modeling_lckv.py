@@ -86,9 +86,7 @@ class LCKVLlamaAttention(LlamaFlashAttention2):
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         query_states = apply_rotary(query_states, cos, sin)
 
-        # get the cached key and value states
-        key_states, value_states = past_key_value.layer_get(self.layer_type.attends_to())
-
+        # compute key and value states
         if self.layer_type.computes_kv():
             key_states = self.k_proj(hidden_states)
             value_states = self.v_proj(hidden_states)
@@ -103,6 +101,12 @@ class LCKVLlamaAttention(LlamaFlashAttention2):
                 key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
             past_key_value.layer_set(self.layer_idx, key_states, value_states)
+
+        # get the cached key and value states
+        key_states, value_states = past_key_value.layer_get(
+            self.layer_type.attends_to(),
+            zerofill=self.layer_type.attends_top(),
+        )
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -230,10 +234,10 @@ class LCKVLlamaModel(LlamaModel):
             else:
                 raise NotImplementedError("Only DynamicCache is supported for now.")
 
-            past_key_values.setup(self.layer_types, placeholder)
+            past_key_values.setup(placeholder)
 
         # initialize the cache
-        past_key_values.initialize(inputs_embeds.shape[1])
+        past_key_values.initialize(self.layer_types, inputs_embeds.shape[1])
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if isinstance(past_key_values, Cache) else 0

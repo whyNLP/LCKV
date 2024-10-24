@@ -329,18 +329,13 @@ class LayerCache(torch.nn.Module):
         self.layer_type = None
         self.placeholder = None
 
-    def setup(self, layer_type: LayerType, placeholder: torch.Tensor):
+    def setup(self, placeholder: torch.Tensor):
         """setup the cache, calling this function is necessary if there is a layer that attends to the top layers"""
-        self.layer_type = layer_type
         self.placeholder = placeholder
 
-    def initialize(self, sequence_length: int):
+    def initialize(self, layer_type: LayerType, sequence_length: int):
         """initialize the cache"""
-        if self.layer_type is None:
-            # TODO: add a warning
-            return
-
-        layers_to_init = {self.layer_type.attends_to(idx) for idx in range(len(self.layer_type)) if self.layer_type.attends_to(idx) > idx}
+        layers_to_init = {layer_type.attends_to(idx) for idx in range(len(layer_type)) if layer_type.attends_top(idx)}
 
         if layers_to_init:
             b, h, _, d = self.placeholder.size()
@@ -349,11 +344,11 @@ class LayerCache(torch.nn.Module):
             for layer_idx in layers_to_init:
                 self.layer_append(layer_idx, init_kvs, init_kvs)
 
-    def layer_get(self, layer_idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def layer_get(self, layer_idx: int, zerofill: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
         key_states = self.key_layer_cache.get(layer_idx, None)
         value_states = self.value_layer_cache.get(layer_idx, None)
 
-        if self.layer_type is not None and self.layer_type.attends_top(layer_idx):
+        if zerofill:
             if key_states is None:
                 key_states = self.placeholder
                 value_states = self.placeholder
