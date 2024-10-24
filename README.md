@@ -83,9 +83,15 @@ config.forward_passes  = 7      # m in the paper
 config.backward_passes = 2      # b in the paper
 config.layer_types     = "0_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_21" # for each layer, which layer to attend to
 
-# we also supports this
-config.layer_types     = "0_0_0_0_0_0_0_0_0_0_10_10_10_10_10_10_10_10_10_10_10_10" # YOCO config
+# we also support this
+config.layer_types     = "0_1_2_3_4_5_6_7_8_9_10_11_12_13_14_15_16_17_18_19_20_21" # Llama config
 config.layer_types     = "0_0_2_2_4_4_6_6_8_8_10_10_12_12_14_14_16_16_18_18_20_20" # CLA config
+
+config.sliding_window  = 1024   # the window size for the sliding window attention
+config.layer_types     = "0s_1s_2s_3s_4s_5s_6s_7s_8s_9s_10s_11_11_11_11_11_11_11_11_11_11_11" # YOCO config, 's' is for sliding window
+
+config.sliding_window  = 1024   # the window size for the sliding window attention
+config.layer_types     = "0_1s_1s_3s_3s_3s_0_7s_7s_9s_9s_9s_12_13s_13s_15s_15s_15s_12_19s_19s_19s" # MixAttention (Pairs) config
 ```
 
 #### Option 2: Modify the configurations in the shell script (via `--config_overrides`):
@@ -97,10 +103,7 @@ accelerate launch run_clm.py \
     ...
 ```
 
-With the above configurations, you can create [CLA](http://arxiv.org/abs/2405.12981) or [YOCO](https://arxiv.org/abs/2405.05254) models without changing the code. The only thing you need to do is to write the correct `layer_types` in the configuration file.
-
-> [!WARNING]
-> YOCO uses efficient self-attention mechanisms. The current implementation does not support this yet.
+With the above configurations, you can create [CLA](http://arxiv.org/abs/2405.12981), [YOCO](https://arxiv.org/abs/2405.05254) or any configurations in [Cross-Layer KV Sharing](http://arxiv.org/abs/2410.14442) or [MixAttention](http://arxiv.org/abs/2409.15012) without changing the code. The only thing you need to do is to write the correct `layer_types` in the configuration file.
 
 ### Training
 
@@ -133,6 +136,10 @@ bash run_streaming.sh
 ```
 
 See the script for more details. The `run_generation.py` script also supports streaming inference with the `--sink_cache` flag.
+
+#### Sliding Window Attention
+
+The generation script also supports sliding window attention inference. You only need to use the `--sink_cache` flag and specify the `--num_sink_tokens` as 0.
 
 ### Evaluation
 
