@@ -390,15 +390,12 @@ def main():
         logger.info(f"Overriding config: {args.config_overrides}")
         config.update_from_string(args.config_overrides)
         logger.info(f"New config: {config}")
-    import os
-    if os.environ.get('LCKV_FLASH_ATTN', False):
-        config._flash_attn_2_enabled = True
     torch_dtype = (
         args.torch_dtype
         if args.torch_dtype in ["auto", None]
         else getattr(torch, args.torch_dtype)
     )
-    model = model_class.from_pretrained(args.model_name_or_path, config=config, torch_dtype=torch_dtype)
+    model = model_class.from_pretrained(args.model_name_or_path, config=config, torch_dtype=torch_dtype, attn_implementation="flash_attention_2")
 
     # Set the model to the right device
     model.to(distributed_state.device)

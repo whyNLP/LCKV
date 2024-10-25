@@ -84,20 +84,20 @@ class LayerType:
 
         # otherwise, return the plan for the cyclic dependency
         low = attends_top.index(True)
-        high = max([i for idx, i in enumerate(self.layer_indices) if i > idx])
+        high = 1 + max([i for idx, i in enumerate(self.layer_indices) if i > idx])
         plan = [
             # warmup step
-            IterStep(slice(low)),
+            *([IterStep(slice(low))] if low > 0 else []),
 
             # do several forward passes only to update KVs
-            *forward_passes * [IterStep(slice(low, high + 1), requires_grad=False, update=False)],
+            *forward_passes * [IterStep(slice(low, high), requires_grad=False, update=False)],
 
             # do backward passes to compute gradients
-            *(backward_passes - 1) * [IterStep(slice(low, high + 1), update=False)],
-            IterStep(slice(low, high + 1)),
+            *(backward_passes - 1) * [IterStep(slice(low, high), update=False)],
+            IterStep(slice(low, high)),
 
             # finish up the rest of the layers
-            IterStep(slice(high + 1, None)),
+            *(IterStep(slice(high, None)) if high < len(self) else []),
         ]
         return plan
 

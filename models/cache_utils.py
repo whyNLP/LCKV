@@ -353,8 +353,8 @@ class LayerCache(torch.nn.Module):
                 key_states = self.placeholder
                 value_states = self.placeholder
             else:
-                key_states = torch.cat([self.placeholder, key_states], dim=1)
-                value_states = torch.cat([self.placeholder, value_states], dim=1)
+                key_states = torch.cat([self.placeholder, key_states], dim=2)
+                value_states = torch.cat([self.placeholder, value_states], dim=2)
 
         return key_states, value_states
 
