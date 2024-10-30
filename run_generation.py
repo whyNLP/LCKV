@@ -27,6 +27,7 @@ import torch
 from accelerate import PartialState
 from accelerate.utils import set_seed
 
+from models import LCKVLlamaForCausalLM
 from transformers import (
     AutoTokenizer,
     BloomForCausalLM,
@@ -49,9 +50,8 @@ from transformers import (
     XLNetLMHeadModel,
     XLNetTokenizer,
 )
-from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.cache_utils import SinkCache
-from models import LCKVLlamaForCausalLM
+from transformers.modeling_outputs import CausalLMOutputWithPast
 
 
 logging.basicConfig(
@@ -402,8 +402,9 @@ def main():
 
     if args.fp16:
         model.half()
-    max_seq_length = getattr(model.config, "max_position_embeddings", 0)
-    args.length = adjust_length_to_model(args.length, max_sequence_length=max_seq_length)
+    # XXX: we should not adjust the length to the model configs
+    # max_seq_length = getattr(model.config, "max_position_embeddings", 0)
+    # args.length = adjust_length_to_model(args.length, max_sequence_length=max_seq_length)
     logger.info(args)
 
     prompt_text = args.prompt if args.prompt else input("Model prompt >>> ")

@@ -12,6 +12,8 @@ class IndexedCache(Cache):
     Similar to the `DynamicCache` class, but with the ability to index the cache by layer index. DynamicCache
     assumes that all layers compute KVs, while IndexedCache allows for a more flexible cache structure.
     """
+    build_position_ids_based_on_cache = False
+
     def __init__(self) -> None:
         super().__init__()
         self.key_cache: Dict[int, torch.Tensor] = {}
@@ -128,6 +130,7 @@ class IndexedSinkCache(Cache):
     This is a fix to the SinkCache class in the transformers library. It also allows for the cache to be indexed by
     layer index, similar to the `IndexedCache` class.
     """
+    build_position_ids_based_on_cache = True
 
     def __init__(self, window_length: int = None, num_sink_tokens: int = None) -> None:
         super().__init__()

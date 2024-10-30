@@ -458,25 +458,17 @@ class LCKVLlamaForCausalLM(LlamaForCausalLM):
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
 
-            if attention_mask is not None:
-                # If we have gone beyond the current cache length, we need to crop the input attention mask.
-                total_length = attention_mask.shape[1]
-                # XXX: It seems that Cache.get_seq_length() will be deprecated and replaced by cache_position, but
-                # it is NOT consistent with cache_position
-                cur_cache_length = past_key_values.get_seq_length()
-                if (
-                    cur_cache_length is not None
-                    and attention_mask is not None
-                    and total_length > cur_cache_length + input_ids.shape[1]
-                ):
-                    attention_mask = attention_mask[:, -cur_cache_length - input_ids.shape[1] :]
-
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
+            if isinstance(past_key_values, Cache):
+
+                if getattr(past_key_values, "build_position_ids_based_on_cache", False):
+                    cur_cache_length = past_key_values.get_seq_length()
+                    position_ids = position_ids[:, cur_cache_length :cur_cache_length + input_ids.shape[1]]
+                else:
+                    position_ids = position_ids[:, -input_ids.shape[1] :]
 
                 # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
                 position_ids = position_ids.clone(memory_format=torch.contiguous_format)
