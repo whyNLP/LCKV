@@ -97,7 +97,7 @@ class LayerType:
             IterStep(slice(low, high)),
 
             # finish up the rest of the layers
-            *(IterStep(slice(high, None)) if high < len(self) else []),
+            *([IterStep(slice(high, None))] if high < len(self) else []),
         ]
         return plan
 
