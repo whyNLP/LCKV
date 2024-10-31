@@ -78,12 +78,13 @@ from models import LCKVLlamaConfig
 # we have prepared a sample configuration file
 config = LCKVLlamaConfig.from_pretrained("configs/tinyllama_lckv.json")
 
-# you may modify the configuration as you like
+# below is the LCKV config. you may modify the configuration as you like
 config.forward_passes  = 7      # m in the paper
 config.backward_passes = 2      # b in the paper
 config.layer_types     = "0_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_20_21" # for each layer, which layer to attend to
 
 # we also support this
+config.layer_types     = "0_10_10_10_10_10_10_10_10_10_10_10_10_10_10_10_10_10_10_10_10_21" # the sandwich-middle configuration
 config.layer_types     = "0_1_2_3_4_5_6_7_8_9_10_11_12_13_14_15_16_17_18_19_20_21" # Llama config
 config.layer_types     = "0_0_2_2_4_4_6_6_8_8_10_10_12_12_14_14_16_16_18_18_20_20" # CLA config
 
