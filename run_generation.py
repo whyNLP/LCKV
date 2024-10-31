@@ -29,7 +29,7 @@ from accelerate.utils import set_seed
 
 from models import LCKVLlamaForCausalLM
 from models.cache_utils import IndexedHybridCache
-from models.utils import LayerType
+from models.utils import LayerTypeParser
 from transformers import (
     AutoTokenizer,
     BloomForCausalLM,
@@ -454,9 +454,9 @@ def main():
 
     kwargs = {}
     if hasattr(model.config, "layer_types"):
-        layer_types = LayerType(model.config.layer_types)
-        if layer_types.use_sliding_window():
-            kwargs["past_key_values"] = IndexedHybridCache(layer_types, model.config.sliding_window)
+        parser = LayerTypeParser(model.config.layer_types)
+        if parser.use_sliding_window():
+            kwargs["past_key_values"] = IndexedHybridCache(parser, model.config.sliding_window)
             if args.sink_cache:
                 raise ValueError("Sliding window and sink cache cannot be used together.")
     if args.sink_cache:

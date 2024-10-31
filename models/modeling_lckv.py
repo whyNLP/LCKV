@@ -39,7 +39,7 @@ from transformers.utils import add_start_docstrings_to_model_forward
 
 from .cache_utils import AutoLayerCache, LayerCache
 from .configuration_lckv import LCKVLlamaConfig
-from .utils import IterStep, LayerType, flash_attention_forward
+from .utils import IterStep, LayerTypeParser, flash_attention_forward
 
 
 def apply_rotary(q, cos, sin, unsqueeze_dim=1):
@@ -55,11 +55,11 @@ class LCKVLlamaAttention(LlamaFlashAttention2):
 
     def __init__(self, config: LCKVLlamaConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
-        self.layer_type = LayerType(config.layer_types, layer_idx)
-        self.sliding_window = config.sliding_window if self.layer_type.use_sliding_window() else None
+        self.layer_type = LayerTypeParser(config.layer_types)[layer_idx]
+        self.sliding_window = config.sliding_window if self.layer_type.use_sliding_window else None
 
         # Some layers may not need to compute key-value pairs
-        if not self.layer_type.computes_kv():
+        if not self.layer_type.computes_kv:
             del self.k_proj
             del self.v_proj
 
@@ -88,7 +88,7 @@ class LCKVLlamaAttention(LlamaFlashAttention2):
         query_states = apply_rotary(query_states, cos, sin)
 
         # compute key and value states
-        if self.layer_type.computes_kv():
+        if self.layer_type.computes_kv:
             key_states = self.k_proj(hidden_states)
             value_states = self.v_proj(hidden_states)
 
@@ -105,8 +105,8 @@ class LCKVLlamaAttention(LlamaFlashAttention2):
 
         # get the cached key and value states
         key_states, value_states = past_key_value.layer_get(
-            self.layer_type.attends_to(),
-            zerofill=self.layer_type.attends_top(),
+            self.layer_type.attends_to,
+            zerofill=self.layer_type.attends_top,
         )
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
@@ -154,7 +154,7 @@ class LCKVLlamaAttention(LlamaFlashAttention2):
             sliding_window=self.sliding_window,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
-            no_diag=self.layer_type.attends_top(),
+            no_diag=self.layer_type.attends_top,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
@@ -178,8 +178,7 @@ class LCKVLlamaModel(LlamaModel):
     def __init__(self, config: LCKVLlamaConfig):
         super().__init__(config)
         self.layers = nn.ModuleList([LCKVLlamaDecoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
-        self.layer_types = LayerType(config.layer_types)
-        self.prompt_plan = self.layer_types.iteration_plan(self.config.forward_passes, self.config.backward_passes)
+        self.parser = LayerTypeParser(config.layer_types)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -238,7 +237,7 @@ class LCKVLlamaModel(LlamaModel):
             past_key_values.setup(placeholder)
 
         # initialize the cache
-        past_key_values.initialize(self.layer_types, inputs_embeds.shape[1])
+        past_key_values.initialize(self.parser, inputs_embeds.shape[1])
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if isinstance(past_key_values, Cache) else 0
@@ -257,7 +256,7 @@ class LCKVLlamaModel(LlamaModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # we need to do forward passes based on a plan if the input is a prompt
-        plan = self.prompt_plan if inputs_embeds.shape[1] > 1 else [IterStep()]
+        plan = self.parser.iteration_plan(self.config.forward_passes, self.config.backward_passes) if inputs_embeds.shape[1] > 1 else [IterStep()]
 
         iteration_outputs = self._modeling_with_plan(
             hidden_states,

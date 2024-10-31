@@ -4,7 +4,7 @@ import torch
 
 from transformers.cache_utils import Cache, DynamicCache, SinkCache
 
-from .utils import LayerType
+from .utils import LayerTypeParser
 
 
 class IndexedCache(Cache):
@@ -386,9 +386,9 @@ class IndexedHybridCache(IndexedSlidingWindowCache, IndexedCache):
     """
     build_position_ids_based_on_cache = False
 
-    def __init__(self, layer_type: LayerType = None, sliding_window: int = None) -> None:
+    def __init__(self, parser: LayerTypeParser = None, sliding_window: int = None) -> None:
         super().__init__(sliding_window=sliding_window)
-        self.layer_type = layer_type
+        self.parser = parser
 
     def update(
         self,
@@ -397,7 +397,7 @@ class IndexedHybridCache(IndexedSlidingWindowCache, IndexedCache):
         layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor]:
-        if self.layer_type.use_sliding_window(layer_idx):
+        if self.parser[layer_idx].use_sliding_window:
             return IndexedSlidingWindowCache.update(self, key_states, value_states, layer_idx, cache_kwargs)
         else:
             return IndexedCache.update(self, key_states, value_states, layer_idx, cache_kwargs)
@@ -412,7 +412,7 @@ class IndexedHybridCache(IndexedSlidingWindowCache, IndexedCache):
 
         cache._seen_tokens = hybrid_cache._seen_tokens
         cache.sliding_window = hybrid_cache.sliding_window
-        cache.layer_type = hybrid_cache.layer_type
+        cache.parser = hybrid_cache.parser
         for layer_idx in range(len(hybrid_cache.key_cache)):
             cache.key_cache[layer_idx] = hybrid_cache.key_cache[layer_idx]
             cache.value_cache[layer_idx] = hybrid_cache.value_cache[layer_idx]
@@ -439,9 +439,9 @@ class LayerCache(torch.nn.Module):
         """setup the cache, calling this function is necessary if there is a layer that attends to the top layers"""
         self.placeholder = placeholder
 
-    def initialize(self, layer_type: LayerType, sequence_length: int):
+    def initialize(self, parser: LayerTypeParser, sequence_length: int):
         """initialize the cache"""
-        layers_to_init = {layer_type.attends_to(idx) for idx in range(len(layer_type)) if layer_type.attends_top(idx)}
+        layers_to_init = {parser[idx].attends_to for idx in range(len(parser)) if parser[idx].attends_top}
 
         if layers_to_init:
             b, h, _, d = self.placeholder.size()

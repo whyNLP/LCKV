@@ -20,7 +20,7 @@
 """ LCKV LLaMA model configuration"""
 from transformers.models.llama.configuration_llama import LlamaConfig
 
-from .utils import LayerType
+from .utils import LayerTypeParser
 
 
 class LCKVLlamaConfig(LlamaConfig):
@@ -67,4 +67,4 @@ class LCKVLlamaConfig(LlamaConfig):
             self.layer_types = "_".join(map(str, range(self.num_hidden_layers)))
 
         # post check
-        LayerType(self.layer_types).check(self.num_hidden_layers)
+        LayerTypeParser(self.layer_types).check(self.num_hidden_layers)

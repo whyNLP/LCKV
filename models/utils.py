@@ -14,7 +14,16 @@ class IterStep:
     requires_grad: bool = True
     update: bool = True
 
+@dataclass
 class LayerType:
+    """A helper class to collect the layer type information"""
+    layer_idx: int
+    use_sliding_window: bool
+    attends_to: int
+    attends_top: bool
+    computes_kv: bool
+
+class LayerTypeParser:
     """
     A helper class to parse the layer type string and provide some useful methods.
 
@@ -23,19 +32,17 @@ class LayerType:
             means the layer will use the key-value pair in the i-th layer as the kv cache.
             Special characters may be placed after the integers:
             - `s` means the layer will use sliding window attention.
-        layer_idx (int, optional): The index of the current layer.
 
-    >>> layer_type = LayerType("0_0_0_5s_5s_5s_8_8_8")
-    >>> layer_type.attends_to(3)
+    >>> layer_type = LayerTypeParser("0_0_0_5s_5s_5s_8_8_8")[3]
+    >>> layer_type.attends_to
     5
-    >>> layer_type.attends_top(3)
+    >>> layer_type.attends_top
     True
-    >>> layer_type.use_sliding_window(3)
+    >>> layer_type.use_sliding_window
     True
     """
-    def __init__(self, layer_type: str, layer_idx: Optional[int] = None):
+    def __init__(self, layer_type: str):
         self._layer_type = layer_type
-        self.layer_idx = layer_idx
 
         # parse the layer type
         self.layer_indices = []
@@ -48,51 +55,29 @@ class LayerType:
     def __len__(self):
         return len(self.layer_indices)
 
-    def use_sliding_window(self, layer_idx: int = None) -> bool:
-        """whether the layer uses sliding window attention"""
-        if layer_idx is None:
-            layer_idx = self.layer_idx
+    def __getitem__(self, layer_idx: int) -> LayerType:
+        """return the layer type information for the given layer index"""
+        return LayerType(
+            layer_idx=layer_idx,
+            use_sliding_window=self.sliding_window[layer_idx],
+            attends_to=self.layer_indices[layer_idx],
+            attends_top=self.layer_indices[layer_idx] > layer_idx,
+            computes_kv=layer_idx in self.layer_indices,
+        )
 
-        if layer_idx is None:
-            return any(self.sliding_window)
-        else:
-            return self.sliding_window[layer_idx]
+    def use_sliding_window(self) -> bool:
+        """whether there exists a layer that uses sliding window attention"""
+        return any(self.sliding_window)
 
-    def attends_to(self, layer_idx: int = None) -> int:
-        """return the layer that the current layer attends to"""
-        if layer_idx is None:
-            layer_idx = self.layer_idx
-
-        if layer_idx is None:
-            raise ValueError("The layer index should be provided.")
-        else:
-            return self.layer_indices[layer_idx]
-
-    def attends_top(self, layer_idx: int = None) -> bool:
-        """whether the layer attends to layers above it"""
-        if layer_idx is None:
-            layer_idx = self.layer_idx
-
-        if layer_idx is None:
-            return any(self.layer_indices[i] > i for i in range(len(self)))
-        else:
-            return self.layer_indices[layer_idx] > layer_idx
-
-    def computes_kv(self, layer_idx: int = None) -> bool:
-        """whether the layer computes key-value pairs"""
-        if layer_idx is None:
-            layer_idx = self.layer_idx
-
-        if layer_idx is None:
-            raise ValueError("The layer index should be provided.")
-        else:
-            return layer_idx in self.layer_indices
+    def attends_top(self) -> bool:
+        """whether there exists a layer that attends to layers above it"""
+        return any(self.layer_indices[i] > i for i in range(len(self)))
 
     def iteration_plan(self, forward_passes: int = 7, backward_passes: int = 2) -> List[IterStep]:
         """
         Return a iteration plan for the layer types. The plan is a list of IterStep objects.
         """
-        attends_top = [self.attends_top(i) for i in range(len(self))]
+        attends_top = [self[i].attends_top for i in range(len(self))]
 
         # if there is no cyclic dependency, return the default plan
         if True not in attends_top:
