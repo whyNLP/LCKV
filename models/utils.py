@@ -77,29 +77,43 @@ class LayerTypeParser:
         """
         Return a iteration plan for the layer types. The plan is a list of IterStep objects.
         """
-        attends_top = [self[i].attends_top for i in range(len(self))]
-
         # if there is no cyclic dependency, return the default plan
-        if True not in attends_top:
+        if not self.attends_top():
             return [IterStep()]
 
         # otherwise, return the plan for the cyclic dependency
-        low = attends_top.index(True)
-        high = 1 + max([i for idx, i in enumerate(self.layer_indices) if i > idx])
-        plan = [
-            # warmup step
-            *([IterStep(slice(low))] if low > 0 else []),
+        plan = []
+        i = 0
+        while i < len(self):
 
-            # do several forward passes only to update KVs
-            *forward_passes * [IterStep(slice(low, high), requires_grad=False, update=False)],
+            # if the layer attends to top layers, resolve the cyclic dependency
+            if self[i].attends_top:
 
-            # do backward passes to compute gradients
-            *(backward_passes - 1) * [IterStep(slice(low, high), update=False)],
-            IterStep(slice(low, high)),
+                # find the top layer in the cyclic dependency
+                top = self[i].attends_to
+                while top < max(self.layer_indices[i: top + 1]):
+                    top = max(self.layer_indices[i: top + 1])
+                top += 1
 
-            # finish up the rest of the layers
-            *([IterStep(slice(high, None))] if high < len(self) else []),
-        ]
+                # create iteration plan for this group
+                layer_slice = slice(i, top)
+                plan.extend([
+                    *forward_passes * [IterStep(layer_slice, requires_grad=False, update=False)],
+                    *(backward_passes - 1) * [IterStep(layer_slice, update=False)],
+                    IterStep(layer_slice)
+                ])
+
+            # otherwise, create a default plan
+            else:
+
+                top = i + 1
+                while top < len(self) and not self[top].attends_top:
+                    top += 1
+                plan.append(IterStep(slice(i, top)))
+
+            # update the index
+            i = top
+
         return plan
 
     def check(self, num_hidden_layers: int):
