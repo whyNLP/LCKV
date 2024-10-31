@@ -139,7 +139,7 @@ See the script for more details. The `run_generation.py` script also supports st
 
 #### Sliding Window Attention
 
-The generation script also supports sliding window attention inference. You only need to use the `--sink_cache` flag and specify the `--num_sink_tokens` as 0.
+The generation script also supports sliding window attention inference. If the model is trained with sliding window attention, the generation script will automatically use the sliding window attention for inference.
 
 ### Evaluation
 
