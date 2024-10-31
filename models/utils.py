@@ -117,14 +117,12 @@ class LayerTypeParser:
         return plan
 
     def check(self, num_hidden_layers: int):
+        """Check if the layer type is valid"""
         if len(self.layer_indices) != num_hidden_layers:
             raise ValueError("The number of layer types should be equal to the number of hidden layers.")
         for i in range(num_hidden_layers):
             if self.layer_indices[i] not in range(num_hidden_layers):
                 raise ValueError("The layer type should be in the range of the number of hidden layers.")
-            # TODO: manually solve the dependency
-            if self.layer_indices[i] != self.layer_indices[self.layer_indices[i]]:
-                raise ValueError("The layer should only attends to the layers that attends to itself.")
 
 
 def flash_attention_forward(
