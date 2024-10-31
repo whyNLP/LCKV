@@ -317,6 +317,109 @@ class IndexedSinkCache(Cache):
         return cache
 
 
+class IndexedSlidingWindowCache(IndexedCache):
+    """
+    Similar to the `SlidingWindowCache` class, but with the ability to index the cache by layer index. It is no longer
+    a subclass of `StaticCache` as it is dynamic.
+    """
+    build_position_ids_based_on_cache = False
+
+    def __init__(self, sliding_window: int = None) -> None:
+        super().__init__()
+        self.sliding_window = sliding_window
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor]:
+        # Update the number of seen tokens
+        if self.is_min_layer(layer_idx):
+            self._seen_tokens += key_states.shape[-2]
+
+        # [bsz, num_heads, seq_len, head_dim]
+        if layer_idx not in self.key_cache:
+            # Empty cache
+            new_key_states = key_states
+            new_value_states = value_states
+
+        else:
+            # Growing cache
+            new_key_states = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
+            new_value_states = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+
+        if self._update:
+            self.key_cache[layer_idx] = new_key_states
+            self.value_cache[layer_idx] = new_value_states
+
+        # If the cache is full, we need to shift the cache
+        if self.get_seq_length(layer_idx) > self.sliding_window:
+            self.key_cache[layer_idx] = self.key_cache[layer_idx][:, :, -self.sliding_window :]
+            self.value_cache[layer_idx] = self.value_cache[layer_idx][:, :, -self.sliding_window :]
+
+        return new_key_states, new_value_states
+
+    def get_max_length(self) -> Optional[int]:
+        return self.sliding_window
+
+    @classmethod
+    def from_cache(cls, sliding_window_cache: "IndexedSlidingWindowCache", *args, **kwargs) -> "IndexedSlidingWindowCache":
+        """This is to override the `from_cache` method in the `IndexedCache` class."""
+        cache = cls(*args, **kwargs)
+
+        cache._seen_tokens = sliding_window_cache._seen_tokens
+        cache.sliding_window = sliding_window_cache.sliding_window
+        for layer_idx in range(len(sliding_window_cache.key_cache)):
+            cache.key_cache[layer_idx] = sliding_window_cache.key_cache[layer_idx]
+            cache.value_cache[layer_idx] = sliding_window_cache.value_cache[layer_idx]
+
+        return cache
+
+
+class IndexedHybridCache(IndexedSlidingWindowCache, IndexedCache):
+    """
+    Hybrid Cache class to be used for models that alternate between a local sliding window attention and global
+    attention in every other layer. Under the hood, Hybrid Cache leverages ["IndexedSlidingWindowCache"] for
+    sliding window attention and ["IndexedCache"] for global attention.
+    """
+    build_position_ids_based_on_cache = False
+
+    def __init__(self, layer_type: LayerType = None, sliding_window: int = None) -> None:
+        super().__init__(sliding_window=sliding_window)
+        self.layer_type = layer_type
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor]:
+        if self.layer_type.use_sliding_window(layer_idx):
+            return IndexedSlidingWindowCache.update(self, key_states, value_states, layer_idx, cache_kwargs)
+        else:
+            return IndexedCache.update(self, key_states, value_states, layer_idx, cache_kwargs)
+
+    def get_max_length(self) -> Optional[int]:
+        return IndexedCache.get_max_length(self)
+
+    @classmethod
+    def from_cache(cls, hybrid_cache: "IndexedHybridCache", *args, **kwargs) -> "IndexedHybridCache":
+        """This is to override the `from_cache` method in the `IndexedSlidingWindowCache` class."""
+        cache = cls(*args, **kwargs)
+
+        cache._seen_tokens = hybrid_cache._seen_tokens
+        cache.sliding_window = hybrid_cache.sliding_window
+        cache.layer_type = hybrid_cache.layer_type
+        for layer_idx in range(len(hybrid_cache.key_cache)):
+            cache.key_cache[layer_idx] = hybrid_cache.key_cache[layer_idx]
+            cache.value_cache[layer_idx] = hybrid_cache.value_cache[layer_idx]
+
+        return cache
+
+
 class LayerCache(torch.nn.Module):
     """
     A cache for storing the key-value pairs for layers.
@@ -392,6 +495,24 @@ class LayerIndexedSinkCache(LayerCache, IndexedSinkCache):
         IndexedSinkCache.__init__(self)
 
 
+class LayerIndexedSlidingWindowCache(LayerCache, IndexedSlidingWindowCache):
+    """
+    A cache for storing the key-value pairs for layers, in combination with the ability of sliding window KV cache.
+    """
+    def __init__(self) -> None:
+        LayerCache.__init__(self)
+        IndexedSlidingWindowCache.__init__(self)
+
+
+class LayerIndexedHybridCache(LayerCache, IndexedHybridCache):
+    """
+    A cache for storing the key-value pairs for layers, in combination with the ability of hybrid KV cache.
+    """
+    def __init__(self) -> None:
+        LayerCache.__init__(self)
+        IndexedHybridCache.__init__(self)
+
+
 class AutoLayerCache(torch.nn.Module):
     """
     AutoLayerCache is a module that automatically creates a cache from an existing cache.
@@ -399,6 +520,8 @@ class AutoLayerCache(torch.nn.Module):
     CACHE_MAPPING = {
         DynamicCache: LayerIndexedCache,
         SinkCache: LayerIndexedSinkCache,
+        IndexedSlidingWindowCache: LayerIndexedSlidingWindowCache,
+        IndexedHybridCache: LayerIndexedHybridCache,
     }
 
     def __init__(self, *args, **kwargs):

@@ -52,25 +52,41 @@ class LayerType:
         """whether the layer uses sliding window attention"""
         if layer_idx is None:
             layer_idx = self.layer_idx
-        return self.sliding_window[layer_idx]
+
+        if layer_idx is None:
+            return any(self.sliding_window)
+        else:
+            return self.sliding_window[layer_idx]
 
     def attends_to(self, layer_idx: int = None) -> int:
         """return the layer that the current layer attends to"""
         if layer_idx is None:
             layer_idx = self.layer_idx
-        return self.layer_indices[layer_idx]
+
+        if layer_idx is None:
+            raise ValueError("The layer index should be provided.")
+        else:
+            return self.layer_indices[layer_idx]
 
     def attends_top(self, layer_idx: int = None) -> bool:
         """whether the layer attends to layers above it"""
         if layer_idx is None:
             layer_idx = self.layer_idx
-        return self.layer_indices[layer_idx] > layer_idx
+
+        if layer_idx is None:
+            return any(self.layer_indices[i] > i for i in range(len(self)))
+        else:
+            return self.layer_indices[layer_idx] > layer_idx
 
     def computes_kv(self, layer_idx: int = None) -> bool:
         """whether the layer computes key-value pairs"""
         if layer_idx is None:
             layer_idx = self.layer_idx
-        return layer_idx in self.layer_indices
+
+        if layer_idx is None:
+            raise ValueError("The layer index should be provided.")
+        else:
+            return layer_idx in self.layer_indices
 
     def iteration_plan(self, forward_passes: int = 7, backward_passes: int = 2) -> List[IterStep]:
         """

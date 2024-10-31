@@ -28,6 +28,8 @@ from accelerate import PartialState
 from accelerate.utils import set_seed
 
 from models import LCKVLlamaForCausalLM
+from models.cache_utils import IndexedHybridCache
+from models.utils import LayerType
 from transformers import (
     AutoTokenizer,
     BloomForCausalLM,
@@ -451,6 +453,12 @@ def main():
         model = _ModelFallbackWrapper(traced_model, model)
 
     kwargs = {}
+    if hasattr(model.config, "layer_types"):
+        layer_types = LayerType(model.config.layer_types)
+        if layer_types.use_sliding_window():
+            kwargs["past_key_values"] = IndexedHybridCache(layer_types, model.config.sliding_window)
+            if args.sink_cache:
+                raise ValueError("Sliding window and sink cache cannot be used together.")
     if args.sink_cache:
         kwargs["past_key_values"] = SinkCache(args.window_length, args.num_sink_tokens)
 
