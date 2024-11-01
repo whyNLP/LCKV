@@ -115,6 +115,58 @@ bash run_clm.sh
 
 See the script for more details. For pretraining on SlimPajama, please follow the instructions in [tinyllama-zh](https://github.com/whyNLP/tinyllama-zh) and replace the dataset with SlimPajama.
 
+
+#### Initializing from a Pretrained Model
+
+We may initialize our LCKV model from a pretrained model. Most parts of the model structure are consistent with the standard transformer model and we can directly inherit the weights. For the KV weights $W_K, W_V$, we mainly have 2 options:
+
+##### Option 1: Directly Copy the Weights
+
+Simply add `--model_name_or_path` to the training script:
+
+```sh
+accelerate launch run_clm.py \
+    --model_name_or_path TinyLlama/TinyLlama-1.1B-intermediate-step-1195k-token-2.5T \
+    --config configs/tinyllama_lckv.json \
+    ...
+```
+
+See the script `run_clm.sh` for more details.
+
+##### Option 2: Average the Weights from Multiple Layers
+
+Following [MLKV](http://arxiv.org/abs/2406.09297), we may average the weights from multiple layers to initialize the KV weights. We provide a script `convert_pretrained.py` to convert the pretrained model to the LCKV model. You may run the following command:
+
+```sh
+python convert_pretrained.py --model_name_or_path TinyLlama/TinyLlama-1.1B-intermediate-step-1195k-token-2.5T --config_name configs/tinyllama_lckv.json --output_dir outputs/tinyllama-converted
+```
+
+The KV weights of each layer will be the average from the all the layers attends to it. For example,
+
+```python
+# the CLA / MLKV config
+config.layer_types = "0_0_2_2_4_4_6_6"
+# then layer 0 will have the average KV weights from layer 0 and 1 in the pretrained model
+#      layer 2 will have the average KV weights from layer 2 and 3 in the pretrained model
+
+# the LCKV config
+config.layer_types = "0_6_6_6_6_6_6_7"
+# then layer 0 will inherit the KV weights from layer 0 in the pretrained model
+#      layer 6 will have the average KV weights from layer 1, 2, 3, 4, 5, 6 in the pretrained model
+#      layer 7 will inherit the KV weights from layer 7 in the pretrained model
+```
+
+then, use the converted model to initialize the LCKV model:
+
+```sh
+accelerate launch run_clm.py \
+    --model_name_or_path outputs/tinyllama-converted \
+    ...
+```
+
+Our experiments show that such an initialization strategy can effectively improve the performance of the model in most cases.
+
+
 ### Inference
 
 We use the same [inference script](https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-generation/run_generation.py) as the original `transformers` library. To perform inference, you may run the following command:
