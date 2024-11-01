@@ -24,6 +24,7 @@ accelerate launch run_clm.py \
     --torch_dtype bfloat16 \
     --do_train \
     --do_eval \
+    --use_liger_kernel \
     --num_train_epochs 3 \
     --save_total_limit 1 \
     --save_strategy steps \

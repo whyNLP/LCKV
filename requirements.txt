@@ -4,5 +4,6 @@ datasets
 evaluate
 scikit-learn
 sentencepiece
+liger-kernel >= 0.3.0
 flash-attn ~= 2.6.3
 git+https://github.com/EleutherAI/lm-evaluation-harness@v0.4.5
