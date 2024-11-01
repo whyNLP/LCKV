@@ -1,0 +1,186 @@
+"""https://github.com/linkedin/Liger-Kernel/blob/main/src/liger_kernel/ops/rope.py"""
+
+import torch
+import triton
+import triton.language as tl
+
+
+@triton.jit
+def _triton_rope(
+    q_ptr,
+    q_row_stride,
+    cos,
+    cos_row_stride,
+    sin,
+    sin_row_stride,
+    sl,
+    bs: tl.constexpr,
+    n_qh: tl.constexpr,
+    hd: tl.constexpr,
+    pad_n_qh: tl.constexpr,
+    pad_hd: tl.constexpr,
+    BLOCK_SIZE: tl.constexpr,
+    BACKWARD_PASS: tl.constexpr = False,
+):
+    # q size: (bsz, seq_len, num_q_heads, head_dim)
+    # q stride: (seq_len * num_q_heads * head_dim, num_q_heads * head_dim, head_dim, 1)
+
+    # cos size: (1, seq_len, head_dim)
+    # stride: (seq_len * head_dim, head_dim, 1)
+    pid = tl.program_id(0)
+
+    # locate start address
+    q_ptr = q_ptr + pid * q_row_stride
+
+    # ####################################################################
+    # get the cos(mθ_{i...d/2}) and sin(mθ_{i...d/2}) for token position
+    # m of this program instance
+    # ####################################################################
+
+    # 1. program instances are laid out in a 1D vector of size bsz * seq_len, which
+    # effectively represents a 2D grid of size [bsz, seq_len] with seq_len dimension
+    # being the fastest changing dimension. Thus we can simply do pid // sl to get the batch index
+    # and pid % sl to get the sequence index.
+    # 2. We only need the left half of cos and sin matrix because the right half is just
+    # a clone of the left half.
+    cos_row_idx = pid % (sl)
+    cos = cos + cos_row_idx * cos_row_stride
+    sin = sin + cos_row_idx * sin_row_stride
+    cos_offsets = tl.arange(0, pad_hd // 2)
+    cos_mask = cos_offsets < hd // 2
+    cos_row = tl.load(cos + cos_offsets, mask=cos_mask, other=0)
+    sin_row = tl.load(sin + cos_offsets, mask=cos_mask, other=0)
+
+    # ####################################################################
+    # Load the left and right half of q for the current
+    # program instance (i.e. for the current token) separately
+    # ####################################################################
+    # left half of the head
+    first_half_q_offsets = (
+        tl.arange(0, pad_n_qh)[:, None] * hd + tl.arange(0, pad_hd // 2)[None, :]
+    )
+    first_q_mask = (tl.arange(0, pad_n_qh)[:, None] < n_qh) & (
+        tl.arange(0, pad_hd // 2)[None, :] < hd // 2
+    )
+    q_tile_1 = tl.load(q_ptr + first_half_q_offsets, mask=first_q_mask, other=0).to(
+        sin_row.dtype
+    )
+
+    # right half of the head
+    second_half_q_offsets = first_half_q_offsets + (hd // 2)
+    second_q_mask = first_q_mask
+    q_tile_2 = tl.load(q_ptr + second_half_q_offsets, mask=second_q_mask, other=0).to(
+        sin_row.dtype
+    )
+
+    if not BACKWARD_PASS:
+        # y = [x1, x2] * [cos, cos] + [-x2, x1] * [sin, sin]
+        new_q_tile_1 = q_tile_1 * cos_row - q_tile_2 * sin_row
+        tl.store(q_ptr + first_half_q_offsets, new_q_tile_1, mask=first_q_mask)
+        new_q_tile_2 = q_tile_2 * cos_row + q_tile_1 * sin_row
+        tl.store(q_ptr + second_half_q_offsets, new_q_tile_2, mask=second_q_mask)
+    else:
+        # with some math, we can get:
+        # dy = [dx1, dx2] * [cos, cos] + [-dx2, dx1] * [-sin, -sin]
+        new_q_tile_1 = q_tile_1 * cos_row + q_tile_2 * sin_row
+        tl.store(q_ptr + first_half_q_offsets, new_q_tile_1, mask=first_q_mask)
+        new_q_tile_2 = q_tile_2 * cos_row - q_tile_1 * sin_row
+        tl.store(q_ptr + second_half_q_offsets, new_q_tile_2, mask=second_q_mask)
+
+
+def rope_forward(q, cos, sin):
+
+    # transpose it back to the physical shape because Triton looks at the physical storage
+    # note: q is incontiguous before the transformation and will become contiguous after transpose
+    q = q.transpose(1, 2)
+
+    batch_size, seq_len, n_q_head, head_dim = q.shape
+    pad_hd = triton.next_power_of_2(head_dim)
+    pad_n_q_head = triton.next_power_of_2(n_q_head)
+    BLOCK_SIZE = pad_n_q_head
+
+    n_row = batch_size * seq_len
+
+    # ensure tensors passed into the kernel are contiguous. It will be no-op if they are already contiguous
+    q = q.contiguous()
+    cos = cos.contiguous()
+    sin = sin.contiguous()
+
+    _triton_rope[(n_row,)](
+        q,
+        q.stride(1),
+        cos,
+        cos.stride(-2),
+        sin,
+        sin.stride(-2),
+        seq_len,
+        batch_size,
+        n_q_head,
+        head_dim,
+        pad_n_q_head,
+        pad_hd,
+        BLOCK_SIZE=BLOCK_SIZE,
+        BACKWARD_PASS=False,
+    )
+    return q.transpose(1, 2), cos, sin
+
+
+def rope_backward(dq, cos, sin):
+    dq = dq.transpose(1, 2)
+
+    batch_size, seq_len, n_q_head, head_dim = dq.shape
+    pad_hd = triton.next_power_of_2(head_dim)
+    pad_n_q_head = triton.next_power_of_2(n_q_head)
+    BLOCK_SIZE = pad_n_q_head
+
+    n_row = batch_size * seq_len
+
+    # ensure dq is contiguous
+    dq = dq.contiguous()
+
+    # backward is similar to forward except swapping few ops
+    _triton_rope[(n_row,)](
+        dq,
+        dq.stride(1),
+        cos,
+        cos.stride(-2),
+        sin,
+        sin.stride(-2),
+        seq_len,
+        batch_size,
+        n_q_head,
+        head_dim,
+        pad_n_q_head,
+        pad_hd,
+        BLOCK_SIZE=BLOCK_SIZE,
+        BACKWARD_PASS=True,
+    )
+    return dq.transpose(1, 2)
+
+
+class SingleLigerRopeFunction(torch.autograd.Function):
+    """
+    This function re-implements the RoPE operation with only one input tensor.
+    """
+
+    @staticmethod
+    def forward(ctx, q, cos, sin, position_ids=None, unsqueeze_dim=1):
+        """
+        q size: (bsz, n_q_head, seq_len, head_dim)
+        cos size: (1, seq_len, head_dim)
+        sin size: (1, seq_len, head_dim)
+        """
+        q, cos, sin = rope_forward(q, cos, sin)
+        ctx.save_for_backward(cos, sin)
+        return q
+
+    def backward(ctx, dq):
+        """
+        dq size: (bsz, n_q_head, seq_len, head_dim)
+        cos size: (1, seq_len, head_dim)
+        sin size: (1, seq_len, head_dim)
+        """
+
+        cos, sin = ctx.saved_tensors
+        dq = rope_backward(dq, cos, sin)
+        return dq, None, None, None, None

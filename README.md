@@ -63,9 +63,6 @@ and now you have a randomly initialized model with the Layer-Condensed KV Cache.
 
 To accelerate the training and inference of the model, one could apply the liger kernel supported by `transformers` library. The provided training script `run_clm.py` has already activated the liger kernel. See more details [here](https://huggingface.co/docs/transformers/v4.45.2/en/trainer#liger-kernel).
 
-> [!NOTE]
-> The liger kernel of rotary embedding is not supported in the current implementation. We are working on integrating the rotary embedding liger kernel with the Layer-Condensed KV Cache.
-
 ### Configuration
 
 We provide some sample configuration files in the  `configs` folder. The config settings are defined in [models/configuration_lckv.py](models/configuration_lckv.py). You may refer to this file for more details.

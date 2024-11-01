@@ -11,5 +11,7 @@ AutoModelForCausalLM.register(LCKVLlamaConfig, LCKVLlamaForCausalLM)
 
 
 if is_liger_kernel_available():
-    from liger_kernel.transformers.monkey_patch import MODEL_TYPE_TO_APPLY_LIGER_FN, apply_liger_kernel_to_llama
-    MODEL_TYPE_TO_APPLY_LIGER_FN["lckv-llama"] = apply_liger_kernel_to_llama
+    from liger_kernel.transformers.monkey_patch import MODEL_TYPE_TO_APPLY_LIGER_FN
+
+    from .kernel import apply_liger_kernel_to_lckv_llama
+    MODEL_TYPE_TO_APPLY_LIGER_FN["lckv-llama"] = apply_liger_kernel_to_lckv_llama
