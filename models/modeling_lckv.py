@@ -255,21 +255,44 @@ class LCKVLlamaModel(LlamaModel):
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        # we need to do forward passes based on a plan if the input is a prompt
-        plan = self.parser.iteration_plan(self.config.forward_passes, self.config.backward_passes) if inputs_embeds.shape[1] > 1 else [IterStep()]
-
-        iteration_outputs = self._modeling_with_plan(
-            hidden_states,
-            attention_mask=causal_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-            output_hidden_states=output_hidden_states,
-            modeling_plan=plan,
+        # whether to forward sequentially
+        use_sequential = (
+            self.config.use_sequential
+            or inputs_embeds.shape[1] <= self.config.forward_passes + self.config.backward_passes
+            and self.parser.attends_top()
         )
+
+        if use_sequential:
+
+            iteration_outputs = self._modeling_sequential(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                output_hidden_states=output_hidden_states,
+            )
+
+        else:
+
+            # we need to do forward passes based on a plan if the input is a prompt
+            plan = self.parser.iteration_plan(self.config.forward_passes, self.config.backward_passes)
+
+            iteration_outputs = self._modeling_with_plan(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                output_hidden_states=output_hidden_states,
+                modeling_plan=plan,
+            )
 
         hidden_states = iteration_outputs.last_hidden_state
         all_hidden_states = iteration_outputs.hidden_states
@@ -420,6 +443,81 @@ class LCKVLlamaModel(LlamaModel):
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_decoder_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+        )
+
+    def _modeling_sequential(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[LayerCache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        output_hidden_states: Optional[bool] = False,
+    ) -> BaseModelOutputWithPast:
+        """
+        Sequentially update the hidden states, token by token.
+        """
+        seq_len = hidden_states.shape[1]
+        last_hidden_state = []
+        all_hidden_states = []
+        all_self_attns = []
+
+        for i in range(seq_len):
+            m_hidden_states = hidden_states[:, i:i+1]
+            m_attention_mask = (
+                (attention_mask[:, : i + 1] if attention_mask.ndim == 2 else attention_mask[:, :, i : i + 1])
+                if attention_mask is not None
+                else None
+            )
+            m_position_ids = position_ids[:, i:i+1] if position_ids is not None else None
+            m_cache_position = cache_position[i:i+1] if cache_position is not None else None
+            m_position_embeddings = (
+                position_embeddings[0][:, i:i+1],
+                position_embeddings[1][:, i:i+1]
+            )
+
+            outputs = self._iterate_layers(
+                m_hidden_states,
+                attention_mask=m_attention_mask,
+                position_ids=m_position_ids,
+                past_key_values=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=m_cache_position,
+                position_embeddings=m_position_embeddings,
+                output_hidden_states=output_hidden_states
+            )
+
+            last_hidden_state.append(outputs.last_hidden_state)
+
+            if output_hidden_states:
+                all_hidden_states.append(outputs.hidden_states)
+
+            if output_attentions:
+                all_self_attns.append(outputs.attentions)
+
+            if use_cache:
+                past_key_values = outputs.past_key_values
+
+        last_hidden_state = torch.cat(last_hidden_state, dim=1)
+
+        if output_hidden_states:
+            all_hidden_states = [
+                torch.cat([hs[i] for hs in all_hidden_states], dim=1) for i in range(len(all_hidden_states[0]))
+            ]
+
+        if output_attentions:
+            # TODO: deal with attention outputs for non-flash-attention implmentations
+            all_self_attns = all_self_attns[-1]
+
+        return BaseModelOutputWithPast(
+            last_hidden_state=last_hidden_state,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )

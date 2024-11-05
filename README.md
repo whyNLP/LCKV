@@ -243,6 +243,11 @@ conda install pytorch==2.5.0 pytorch-cuda=12.1 -c pytorch -c nvidia
 pip install -r requirements.txt
 ```
 
+### Sequential update produces different outputs
+
+Behavior: Model inference with sequential update will produce different outputs with parallel update.
+
+This is due to the precision issues. We find that using `bfloat16`, the down projection in Llama MLP will produce different results when inference with different number of tokens.
 
 ## Questions
 

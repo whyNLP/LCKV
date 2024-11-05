@@ -32,6 +32,7 @@ class LCKVLlamaConfig(LlamaConfig):
         layer_types: str = None,
         forward_passes: int = 7,
         backward_passes: int = 2,
+        use_sequential: bool = False,
         sliding_window: int = 4096,
         **kwargs,
     ):
@@ -53,6 +54,9 @@ class LCKVLlamaConfig(LlamaConfig):
             backward_passes (`int`, *optional*, defaults to 2):
                 The number of backward passes during training and prompt encoding. Equivlent
                 to `b` in the paper.
+            use_sequential (`bool`, *optional*, defaults to False):
+                Whether to do forwarding sequentially, token by token. Useful for testing purpose
+                for models with cyclic dependency. Also can be used for sequential training.
             sliding_window (`int`, *optional*, defaults to 4096):
                 Sliding window attention window size. If not specified, will default to `4096`.
                 It will only be effective if the corresponding layer uses sliding window attention.
@@ -61,6 +65,7 @@ class LCKVLlamaConfig(LlamaConfig):
         self.layer_types = layer_types
         self.forward_passes = forward_passes
         self.backward_passes = backward_passes
+        self.use_sequential = use_sequential
         self.sliding_window = sliding_window
 
         if self.layer_types is None:
