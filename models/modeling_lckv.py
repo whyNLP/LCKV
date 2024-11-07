@@ -31,6 +31,7 @@ from transformers.models.llama.modeling_llama import (
     LlamaFlashAttention2,
     LlamaForCausalLM,
     LlamaModel,
+    LlamaPreTrainedModel,
     _prepare_4d_causal_attention_mask_with_cache_position,
     logger,
     rotate_half,
@@ -172,11 +173,17 @@ class LCKVLlamaDecoderLayer(LlamaDecoderLayer):
         self.self_attn = LCKVLlamaAttention(config=config, layer_idx=layer_idx)
 
 
-class LCKVLlamaModel(LlamaModel):
+class LCKVLlamaPreTrainedModel(LlamaPreTrainedModel):
     config_class = LCKVLlamaConfig
+    supports_gradient_checkpointing = False # not tested yet
+    _no_split_modules = ["LCKVLlamaDecoderLayer"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = False
 
+
+class LCKVLlamaModel(LCKVLlamaPreTrainedModel, LlamaModel):
     def __init__(self, config: LCKVLlamaConfig):
-        super().__init__(config)
+        LlamaModel.__init__(self, config)
         self.layers = nn.ModuleList([LCKVLlamaDecoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.parser = LayerTypeParser(config.layer_types)
 
@@ -523,11 +530,9 @@ class LCKVLlamaModel(LlamaModel):
         )
 
 
-class LCKVLlamaForCausalLM(LlamaForCausalLM):
-    config_class = LCKVLlamaConfig
-
+class LCKVLlamaForCausalLM(LCKVLlamaPreTrainedModel, LlamaForCausalLM):
     def __init__(self, config):
-        super().__init__(config)
+        LlamaForCausalLM.__init__(self, config)
         self.model = LCKVLlamaModel(config)
 
         # Initialize weights and apply final processing
