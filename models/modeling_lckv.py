@@ -104,6 +104,11 @@ class LCKVLlamaAttention(LlamaAttention):
             past_key_value.layer_set(self.layer_idx, key_states, value_states)
 
         # get the cached key and value states
+        # if the layer attends to the top layers, there are two cases:
+        # 1. the query length is 1, in which case we will not do iterative updates. Therefore, the kv lacks the current
+        #    query length and we need to fill it with zeros.
+        # 2. the query length is greater than 1, in which case we will do iterative updates and the kv will have the
+        #    correct query length.
         key_states, value_states = past_key_value.layer_get(
             self.layer_type.attends_to,
             zerofill=self.layer_type.attends_top and q_len == 1,
@@ -356,9 +361,6 @@ class LCKVLlamaModel(LCKVLlamaPreTrainedModel, LlamaModel):
 
             past_key_values.setup(placeholder)
 
-        # initialize the cache
-        past_key_values.initialize(self.parser, inputs_embeds.shape[1])
-
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if isinstance(past_key_values, Cache) else 0
             cache_position = torch.arange(
@@ -397,6 +399,9 @@ class LCKVLlamaModel(LCKVLlamaPreTrainedModel, LlamaModel):
             )
 
         else:
+
+            # initialize the cache
+            past_key_values.initialize(self.parser, inputs_embeds.shape[1])
 
             # we need to do forward passes based on a plan if the input is a prompt
             plan = self.parser.iteration_plan(self.config.forward_passes, self.config.backward_passes)
