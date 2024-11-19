@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch LLaMA model."""
+import copy
 import math
 from typing import List, Optional, Tuple, Union
 
@@ -301,7 +302,8 @@ class LCKVLlamaPreTrainedModel(LlamaPreTrainedModel):
 
 class LCKVLlamaModel(LCKVLlamaPreTrainedModel, LlamaModel):
     def __init__(self, config: LCKVLlamaConfig):
-        LlamaModel.__init__(self, config)
+        LCKVLlamaPreTrainedModel.__init__(self, config)
+        LlamaModel.__init__(self, copy.deepcopy(config)) # copy config to avoid modifying the original
         self.layers = nn.ModuleList([LCKVLlamaDecoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.parser = LayerTypeParser(config.layer_types)
 
@@ -717,7 +719,8 @@ class LCKVLlamaModel(LCKVLlamaPreTrainedModel, LlamaModel):
 
 class LCKVLlamaForCausalLM(LCKVLlamaPreTrainedModel, LlamaForCausalLM):
     def __init__(self, config):
-        LlamaForCausalLM.__init__(self, config)
+        LCKVLlamaPreTrainedModel.__init__(self, config)
+        LlamaForCausalLM.__init__(self, copy.deepcopy(config)) # copy config to avoid modifying the original
         self.model = LCKVLlamaModel(config)
 
         # Initialize weights and apply final processing
