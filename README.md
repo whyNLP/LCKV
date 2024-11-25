@@ -90,6 +90,10 @@ config.layer_types     = "0s_1s_2s_3s_4s_5s_6s_7s_8s_9s_10s_11_11_11_11_11_11_11
 
 config.sliding_window  = 1024   # the window size for the sliding window attention
 config.layer_types     = "0_1s_1s_3s_3s_3s_0_7s_7s_9s_9s_9s_12_13s_13s_15s_15s_15s_12_19s_19s_19s" # MixAttention (Pairs) config
+
+# we also support sequential training / inference, which will process the tokens one by one
+# corresponding to LCKV paper Figure 2(a)
+config.use_sequential = True
 ```
 
 #### Option 2: Modify the configurations in the shell script (via `--config_overrides`):
