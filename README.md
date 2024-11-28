@@ -213,6 +213,27 @@ To test the latency of the model, you may run the following command:
 python test_latency.py
 ```
 
+### Instruction Fine-tuning
+
+> [!WARNING]
+> This section is currently experimental and may not work as expected.
+
+We provide a script `run_sft.sh` for supervised instruction fine-tuning. The code is consistent with the official `trl` library from HuggingFace. You may run the script with:
+
+```sh
+bash run_sft.sh
+```
+
+See the script for more details.
+
+To chat with the fine-tuned model, you may run the following command:
+
+```sh
+python chat.py --model_name_or_path outputs/llamatiny-sft-test
+```
+
+It will load the fine-tuned model and you can chat with it.
+
 
 ## Trouble shooting
 

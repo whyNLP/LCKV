@@ -1,4 +1,5 @@
 transformers ~= 4.45.2
+trl ~= 0.11.4
 accelerate ~= 1.0.1
 datasets
 evaluate
