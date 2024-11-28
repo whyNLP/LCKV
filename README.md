@@ -234,6 +234,17 @@ python chat.py --model_name_or_path outputs/llamatiny-sft-test
 
 It will load the fine-tuned model and you can chat with it.
 
+## Code Style
+
+We mostly follow that of `transformers`. Run the following command to check the code style:
+
+```sh
+# Use `pip install ruff` to install ruff if it is not available
+ruff check models
+```
+
+See more details in `pyproject.toml`.
+
 
 ## Trouble shooting
 
