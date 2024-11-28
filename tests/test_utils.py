@@ -122,11 +122,27 @@ class FlashAttentionForwardTest(unittest.TestCase):
         query_states = torch.randn(2, 5, 3, 4, dtype=torch.bfloat16, device="cuda")
         key_states = torch.randn(2, 6, 3, 4, dtype=torch.bfloat16, device="cuda")
         value_states = torch.randn(2, 6, 3, 4, dtype=torch.bfloat16, device="cuda")
-        attention_mask = torch.ones(2, 5, device="cuda")
+        attention_mask = None
         query_length = 5
         is_causal = True
         no_diag = True
 
+        result = flash_attention_forward(
+            query_states=query_states,
+            key_states=key_states,
+            value_states=value_states,
+            attention_mask=attention_mask,
+            query_length=query_length,
+            is_causal=is_causal,
+            no_diag=no_diag
+        )
+
+        self.assertEqual(result.shape, (2, 5, 3, 4))
+
+        # Test case: attention_mask is not None, square attention matrix
+        query_states = torch.randn(2, 6, 3, 4, dtype=torch.bfloat16, device="cuda")
+        attention_mask = torch.ones(2, 6, dtype=torch.long, device="cuda")
+        attention_mask[1, 2:] = 0
         result = flash_attention_forward(
             query_states=query_states,
             key_states=key_states,
@@ -144,7 +160,7 @@ class FlashAttentionForwardTest(unittest.TestCase):
         query_states = torch.randn(2, 5, 3, 4, dtype=torch.bfloat16, device="cuda")
         key_states = torch.randn(2, 6, 3, 4, dtype=torch.bfloat16, device="cuda")
         value_states = torch.randn(2, 6, 3, 4, dtype=torch.bfloat16, device="cuda")
-        attention_mask = torch.ones(2, 5, device="cuda")
+        attention_mask = None
         query_length = 5
         is_causal = True
         no_diag = False

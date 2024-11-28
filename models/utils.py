@@ -156,6 +156,10 @@ def flash_attention_forward(
         if key_states.size(1) == query_states.size(1):
             prune_query = True
             query_states = query_states[:, 1:, :, :]
+            query_length -= 1
+
+            if attention_mask is not None:
+                attention_mask = attention_mask[:, 1:]
 
         key_states = key_states[:, :-1, :, :]
         value_states = value_states[:, :-1, :, :]
