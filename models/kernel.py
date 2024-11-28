@@ -11,7 +11,7 @@ from liger_kernel.transformers.monkey_patch import (
 from .ops_rope import SingleLigerRopeFunction
 
 
-def liger_rotary(q, cos, sin, position_ids=None, unsqueeze_dim=1):
+def liger_rotary(q, cos, sin, unsqueeze_dim=1):
     """
     Applies Rotary Positional Embedding (RoPE) operation to query and key states.
 
@@ -19,14 +19,13 @@ def liger_rotary(q, cos, sin, position_ids=None, unsqueeze_dim=1):
         q (torch.Tensor): The query tensor of shape (bsz, n_q_head, seq_len, head_dim).
         cos (torch.Tensor): The cosine tensor of shape (1, seq_len, head_dim).
         sin (torch.Tensor): The sine tensor of shape (1, seq_len, head_dim).
-        position_ids (torch.Tensor, optional): The position ids tensor. Defaults to None.
         unsqueeze_dim (int, optional): The dimension to unsqueeze. Defaults to 1.
 
     Returns:
         Tuple[torch.Tensor, torch.Tensor]: The query and key tensors after applying the RoPE operation.
     """
 
-    return SingleLigerRopeFunction.apply(q, cos, sin, position_ids, unsqueeze_dim)
+    return SingleLigerRopeFunction.apply(q, cos, sin, None, unsqueeze_dim)
 
 
 def apply_liger_kernel_to_lckv_llama(

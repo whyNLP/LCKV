@@ -48,7 +48,7 @@ class LayerTypeParser:
         self.layer_indices = []
         self.sliding_window = []
         for s in layer_type.split("_"):
-            layer_idx, sliding_window = re.match(r"(\d+)(s)?", s).groups()
+            layer_idx, sliding_window = re.match(r"^(\d+)(s)?$", s).groups()
             self.layer_indices.append(int(layer_idx))
             self.sliding_window.append(bool(sliding_window))
 
