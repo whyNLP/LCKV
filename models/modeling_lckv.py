@@ -125,7 +125,7 @@ class LCKVLlamaAttention(LlamaAttention):
             attn_weights = attn_weights + causal_mask
 
         # diagonal mask from the right bottom corner
-        if self.layer_type.attends_top:
+        if self.config.force_nodiag or self.layer_type.attends_top:
             kv_len = key_states.size(2)
             mask = attn_weights.new_full((q_len, kv_len), torch.finfo(attn_weights.dtype).min)
             mask = mask.tril(diagonal=kv_len - q_len).triu(diagonal=kv_len - q_len)
@@ -268,7 +268,7 @@ class LCKVLlamaFlashAttention2(LCKVLlamaAttention):
             sliding_window=self.sliding_window,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
             is_causal=self.is_causal,
-            no_diag=self.layer_type.attends_top,
+            no_diag=(self.config.force_nodiag or self.layer_type.attends_top),
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()

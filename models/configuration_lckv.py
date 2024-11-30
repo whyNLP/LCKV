@@ -32,8 +32,9 @@ class LCKVLlamaConfig(LlamaConfig):
         layer_types: str = None,
         forward_passes: int = 7,
         backward_passes: int = 2,
-        use_sequential: bool = False,
         sliding_window: int = 4096,
+        use_sequential: bool = False,
+        force_nodiag: bool = False,
         **kwargs,
     ):
         """
@@ -54,19 +55,24 @@ class LCKVLlamaConfig(LlamaConfig):
             backward_passes (`int`, *optional*, defaults to 2):
                 The number of backward passes during training and prompt encoding. Equivlent
                 to `b` in the paper.
-            use_sequential (`bool`, *optional*, defaults to False):
-                Whether to do forwarding sequentially, token by token. Useful for testing purpose
-                for models with cyclic dependency. Also can be used for sequential training.
             sliding_window (`int`, *optional*, defaults to 4096):
                 Sliding window attention window size. If not specified, will default to `4096`.
                 It will only be effective if the corresponding layer uses sliding window attention.
+            use_sequential (`bool`, *optional*, defaults to False):
+                Whether to do forwarding sequentially, token by token. Useful for testing purpose
+                for models with cyclic dependency. Also can be used for sequential training.
+            force_nodiag (`bool`, *optional*, defaults to False):
+                Whether to force the model to not use the diagonal attention. By default, the model
+                will mask the diagonal attention only in layers necessary. If set to `True`, the model
+                will never use the diagonal attention in any layer. This is mainly for backward compatibility.
         """
         super().__init__(**kwargs)
         self.layer_types = layer_types
         self.forward_passes = forward_passes
         self.backward_passes = backward_passes
-        self.use_sequential = use_sequential
         self.sliding_window = sliding_window
+        self.use_sequential = use_sequential
+        self.force_nodiag = force_nodiag
 
         if self.layer_types is None:
             self.layer_types = "_".join(map(str, range(self.num_hidden_layers)))
