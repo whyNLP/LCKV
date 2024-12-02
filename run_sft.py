@@ -44,7 +44,7 @@ if __name__ == "__main__":
         trust_remote_code=model_config.trust_remote_code,
         attn_implementation=model_config.attn_implementation,
         torch_dtype=model_config.torch_dtype,
-        use_cache=False if training_args.gradient_checkpointing else True,
+        use_cache=False,
         device_map=get_kbit_device_map() if quantization_config is not None else None,
         quantization_config=quantization_config,
     )
