@@ -29,7 +29,36 @@ This work is inspired by [Probabilistic Transformer](https://github.com/whyNLP/P
 
 - [24/10/18] Our new empirical study "[A Systematic Study of Cross-Layer KV Sharing for Efficient LLM Inference](http://arxiv.org/abs/2410.14442)" has released on arXiv. A new configuration has been found to be more efficient than the original LCKV.
 - [24/05/28] This code base now also supports Cross-Layer Attention (CLA). The idea is similar, but they 1) divide the transformer layers into small groups with 2-4 layers in each group; 2) pairs the queries of all the layers with the keys and values of the bottom layer in each group. See details in their paper "[Reducing Transformer Key-Value Cache Size with Cross-Layer Attention](http://arxiv.org/abs/2405.12981)".
-- [24/05/20] LCKV initial code release. 
+- [24/05/20] LCKV initial paper and code release.
+- [24/05/12] Our paper was accepted to ACL 2024 main conference.
+- [24/02/14] Our paper "[Layer-Condensed KV Cache for Efficient Inference of Large Language Models](http://arxiv.org/abs/2405.10637)" was submitted to ARR February 2024 cycle.
+
+## Paper List
+
+This code base (partially) support the ideas in the following papers:
+ - (Wu and Tu, 2024) [Layer-Condensed KV Cache for Efficient Inference of Large Language Models](http://arxiv.org/abs/2405.10637)
+ - (Brandon et al., 2024) [Reducing Transformer Key-Value Cache Size with Cross-Layer Attention](http://arxiv.org/abs/2405.12981)
+ - (Sun et al., 2024) [You Only Cache Once: Decoder-Decoder Architectures for Language Models](https://arxiv.org/abs/2405.05254)
+ - (Rajput et al., 2024) [MixAttention: Pairs of Layers for Efficient Inference of Large Language Models](http://arxiv.org/abs/2409.15012)
+ - (Wu et al., 2024) [A Systematic Study of Cross-Layer KV Sharing for Efficient LLM Inference](http://arxiv.org/abs/2410.14442)
+
+... and more.
+
+## Quick Start
+
+We have released a series of pre-trained models described in our paper on HuggingFace. There is no need to clone this repo if you just want to use the pre-trained models. Load the model with the following code:
+
+```python
+# Use a pipeline as a high-level helper
+from transformers import pipeline
+pipe = pipeline("text-generation", model="whynlp/tinyllama-lckv-w2-ft-100b", trust_remote_code=True)
+
+# Load model directly
+from transformers import AutoModelForCausalLM
+model = AutoModelForCausalLM.from_pretrained("whynlp/tinyllama-lckv-w2-ft-100b", trust_remote_code=True)
+```
+
+See more models on the [HuggingFace model hub](https://huggingface.co/models?search=whynlp). Note that these models are for research purposes only and may not be suitable for production.
 
 ## Installation
 
