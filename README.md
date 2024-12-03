@@ -33,17 +33,6 @@ This work is inspired by [Probabilistic Transformer](https://github.com/whyNLP/P
 - [24/05/12] Our paper was accepted to ACL 2024 main conference.
 - [24/02/14] Our paper "[Layer-Condensed KV Cache for Efficient Inference of Large Language Models](http://arxiv.org/abs/2405.10637)" was submitted to ARR February 2024 cycle.
 
-## Paper List
-
-This code base (partially) support the ideas in the following papers:
- - (Wu and Tu, 2024) [Layer-Condensed KV Cache for Efficient Inference of Large Language Models](http://arxiv.org/abs/2405.10637)
- - (Brandon et al., 2024) [Reducing Transformer Key-Value Cache Size with Cross-Layer Attention](http://arxiv.org/abs/2405.12981)
- - (Sun et al., 2024) [You Only Cache Once: Decoder-Decoder Architectures for Language Models](https://arxiv.org/abs/2405.05254)
- - (Rajput et al., 2024) [MixAttention: Pairs of Layers for Efficient Inference of Large Language Models](http://arxiv.org/abs/2409.15012)
- - (Wu et al., 2024) [A Systematic Study of Cross-Layer KV Sharing for Efficient LLM Inference](http://arxiv.org/abs/2410.14442)
-
-... and more.
-
 ## Quick Start
 
 We have released a series of pre-trained models described in our paper on HuggingFace. There is no need to clone this repo if you just want to use the pre-trained models. Load the model with the following code:
