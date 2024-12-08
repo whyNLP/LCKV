@@ -47,6 +47,13 @@ model = AutoModelForCausalLM.from_pretrained("whynlp/tinyllama-lckv-w2-ft-100b",
 
 See more models on the [HuggingFace model hub](https://huggingface.co/models?search=whynlp). Note that these models are for research purposes only and may not be suitable for production.
 
+| Model                                                                                         | Paper Section                  | Dev ppl. | Common-sense Reasoning |
+| --------------------------------------------------------------------------------------------- | ------------------------------ | -------- | ---------------------- |
+| [whynlp/tinyllama-lckv-w10-ft-250b](https://huggingface.co/whynlp/tinyllama-lckv-w10-ft-250b) | --                             | 7.939    | 50.86                  |
+| [whynlp/tinyllama-lckv-w2-ft-100b](https://huggingface.co/whynlp/tinyllama-lckv-w2-ft-100b)   | Appendix C.1, Table 7 (line 5) | 8.514    | 49.55                  |
+| [whynlp/tinyllama-lckv-w10-100b](https://huggingface.co/whynlp/tinyllama-lckv-w10-100b)       | Section 3.2, Table 2 (line 3)  | 9.265    | 46.84                  |
+| [whynlp/tinyllama-lckv-w2-100b](https://huggingface.co/whynlp/tinyllama-lckv-w2-100b)         | Section 3.2, Table 2 (line 2)  | 9.746    | 45.45                  |
+
 ## Installation
 
 You may install the dependencies with the following commands:
