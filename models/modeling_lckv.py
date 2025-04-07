@@ -367,6 +367,22 @@ class LCKVLlamaSdpaAttention(LCKVLlamaAttention):
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         is_causal = True if causal_mask is None and q_len > 1 else False
 
+        # diagonal mask from the right bottom corner
+        if self.config.force_nodiag or self.layer_type.attends_top:
+            kv_len = key_states.size(2)
+            if causal_mask is None:
+                causal_mask = torch.ones(q_len, kv_len, dtype=torch.bool, device=query_states.device).tril(diagonal=0)
+            causal_mask &= causal_mask.tril(diagonal=kv_len - q_len).triu(diagonal=kv_len - q_len).logical_not()
+            is_causal = False # we cannot use the causal mask and is_causal at the same time
+
+        # sliding window mask
+        if self.sliding_window:
+            kv_len = key_states.size(2)
+            if causal_mask is None:
+                causal_mask = torch.ones(q_len, kv_len, dtype=torch.bool, device=query_states.device).tril(diagonal=0)
+            causal_mask &= causal_mask.tril(diagonal=kv_len - q_len - self.sliding_window).logical_not()
+            is_causal = False
+
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
